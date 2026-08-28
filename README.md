@@ -134,6 +134,13 @@ python wizard_launcher.py
 本项目仅供教育学习、个人教学场景使用。
 **禁止直接打包倒卖、二次封装用于商业盈利。**
 
+产品GITHUB仓库-https://github.com/a13zhy/a13rollcall
+
+产品目录网址-https://dkfile.istester.com/zhysppa13/a13callname.html
+
 ## 👨‍💻 Author
 **a13zhy**二创请标注原作者！！！！！谢谢各位大神
+```
+产品GITHUB仓库-https://github.com/a13zhy/a13rollcall
+产品目录网址-https://dkfile.istester.com/zhysppa13/a13callname.html
 ```
