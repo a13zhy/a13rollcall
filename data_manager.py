@@ -194,6 +194,22 @@ class DataManager:
             data["score"] -= 15
         self.save_stats()
 
+
+    def revert_status_stats(self, name, status):
+        if name not in self.stats:
+            return
+        data = self.stats[name]
+        if status == "已背过":
+            data["mastered"] = max(0, data["mastered"] - 1)
+            data["score"] -= 10
+        elif status == "未背熟":
+            data["familiar"] = max(0, data["familiar"] - 1)
+            data["score"] += 5
+        elif status == "未背过":
+            data["unlearned"] = max(0, data["unlearned"] - 1)
+            data["score"] += 15
+        self.save_stats()
+
     def get_all_stats(self):
         return copy.deepcopy(self.stats)
 

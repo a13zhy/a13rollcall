@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 import copy
 
@@ -10,6 +10,12 @@ RESTART_REQUIRED_KEYS = [
 ]
 
 DEFAULT_CONFIG = {
+    "app": {
+        "class_name": "A13",
+        "app_name": "课堂点名程序",
+        "engine_name": "A13",
+        "version": "6.8"
+    },
     "ui": {
         "theme": "light",
         "font_family": "微软雅黑",
