@@ -1,0 +1,128 @@
+{
+  "app": {
+    "class_name": "A13",
+    "app_name": "课堂点名程序",
+    "engine_name": "A13",
+    "version": "6.8"
+  },
+  "ui": {
+    "theme": "light",
+    "font_family": "微软雅黑",
+    "font_size": 12,
+    "name_font_size": 50,
+    "text_font_size": 14,
+    "name_font_weight": "bold",
+    "animation_duration": 3.0,
+    "ease_strength": 0.92,
+    "animation_curve": "ease_out",
+    "button_radius": 10,
+    "card_radius": 12,
+    "border_width": 1,
+    "shadow_enabled": true,
+    "sidebar_width": 300,
+    "window_opacity": 1.0,
+    "start_animation": true,
+    "start_anim_duration": 2500,
+    "show_status_bar": true,
+    "result_popup": false,
+    "popup_duration": 2000,
+    "draw_countdown": false,
+    "countdown_number": 3,
+    "particle_enabled": true,
+    "particle_count": 30,
+    "particle_speed": 2,
+    "scroll_speed": 1.0,
+    "dark_mode": false,
+    "status_bar": true,
+    "startup_animation": true,
+    "window_topmost": false
+  },
+  "draw": {
+    "mode": "auto",
+    "no_repeat": true,
+    "auto_duration": 4.0,
+    "dynamic_focus": true,
+    "dynamic_weight": true,
+    "rate_mastered": 1.0,
+    "rate_familiar": 2.0,
+    "rate_unlearned": 3.0,
+    "auto_reset_round": true,
+    "sound_enabled": false,
+    "anti_cheat": false,
+    "history_limit": 50,
+    "weight_multiplier": {
+      "已背过": 1,
+      "未背熟": 2,
+      "未背过": 3
+    }
+  },
+  "text": {
+    "extract_mode": "段落抽取",
+    "paragraph_random": true,
+    "show_title": true,
+    "text_align": "left"
+  },
+  "files": {
+    "students": "students.txt",
+    "texts": "texts.txt",
+    "records": "records.txt",
+    "stats": "stats.txt",
+    "students_file": "students.txt",
+    "texts_file": "texts.txt",
+    "records_file": "records.txt",
+    "stats_file": "stats.txt"
+  },
+  "shortcut": {
+    "enabled": true,
+    "key_draw": "space",
+    "key_mastered": "1",
+    "key_familiar": "2",
+    "key_unlearned": "3",
+    "key_hide_panel": "Escape",
+    "key_reset_round": "r"
+  },
+  "student_status": {},
+  "student_weights": {},
+  "text_progress": {},
+  "experimental": {
+    "dpi_optimization": false,
+    "particle_effect": true,
+    "sound_effect": false,
+    "voice_broadcast": false,
+    "anti_cheat_mode": false,
+    "history_recall": false,
+    "smooth_scroll": false,
+    "blur_background": false,
+    "result_popup": false,
+    "countdown_before_draw": false,
+    "auto_reset_round": false
+  },
+  "hooks": {
+    "draw_start": [],
+    "draw_finish": [],
+    "status_change": []
+  },
+  "quick_draw": {
+    "enabled": true,
+    "always_on_top": true,
+    "show_history": true,
+    "auto_hide": false,
+    "sound_enabled": false,
+    "no_repeat": true,
+    "animation_duration": 2.0,
+    "name_font_size": 48,
+    "window_width": 420,
+    "window_height": 520,
+    "show_count": true,
+    "confirm_on_close": true
+  },
+  "tts": {
+    "enabled": false,
+    "rate": 150,
+    "volume": 1.0,
+    "speak_text": true
+  },
+  "startup": {
+    "default_mode": ""
+  }
+}

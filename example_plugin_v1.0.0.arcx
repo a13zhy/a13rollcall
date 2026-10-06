@@ -1,0 +1,20 @@
+{
+  "format": "a13-plugin",
+  "version": "1.0",
+  "metadata": {
+    "name": "示例插件",
+    "id": "example_plugin",
+    "version": "1.0.0",
+    "author": "A13",
+    "description": "这是一个示例插件，展示了插件的基本结构和API用法。",
+    "category": "工具",
+    "created": "2026-09-17T21:52:50.118504"
+  },
+  "code": "IyBBMTMg5o+S5Lu256S65L6L5qih5p2/CiMg5o+S5Lu26ZyA6KaB5a6a5LmJIG1haW4oKSDlh73mlbDvvIzmjqXmlLYgcGx1Z2luX2NvbnRleHQg5Y+C5pWwCgpkZWYgbWFpbihwbHVnaW5fY29udGV4dCk6CiAgICAiIiIKICAgIOaPkuS7tuS4u+WHveaVsAogICAgcGx1Z2luX2NvbnRleHQ6IOaPkuS7tuS4iuS4i+aWh++8jOaPkOS+m+WQhOenjUFQSQogICAgIiIiCiAgICAjIOiOt+WPluaPkuS7tumFjee9rgogICAgY29uZmlnID0gcGx1Z2luX2NvbnRleHQuZ2V0X2NvbmZpZygpCiAgICBlbmFibGVkID0gY29uZmlnLmdldCgiZW5hYmxlZCIsIFRydWUpCgogICAgaWYgbm90IGVuYWJsZWQ6CiAgICAgICAgcmV0dXJuCgogICAgIyDorrDlvZXml6Xlv5cKICAgIHBsdWdpbl9jb250ZXh0LmxvZ19pbmZvKCLmj5Lku7blt7LlkK/liqgiKQoKICAgICMg5re75Yqg6K6+572u6aG16Z2iCiAgICBwbHVnaW5fY29udGV4dC5hZGRfc2V0dGluZ3NfcGFnZSgKICAgICAgICB0aXRsZT0i56S65L6L5o+S5Lu26K6+572uIiwKICAgICAgICBkZXNjcmlwdGlvbj0i6L+Z5piv5LiA5Liq56S65L6L5o+S5Lu255qE6K6+572u6aG16Z2iIiwKICAgICAgICBpdGVtcz1bCiAgICAgICAgICAgIHsia2V5IjogImVuYWJsZWQiLCAidHlwZSI6ICJzd2l0Y2giLCAibGFiZWwiOiAi5ZCv55So5o+S5Lu2IiwgImRlZmF1bHQiOiBUcnVlfSwKICAgICAgICAgICAgeyJrZXkiOiAibWVzc2FnZSIsICJ0eXBlIjogImlucHV0IiwgImxhYmVsIjogIuaPkOekuua2iOaBryIsICJkZWZhdWx0IjogIuS9oOWlvSJ9LAogICAgICAgIF0KICAgICkKCiAgICAjIOazqOWGjOS6i+S7tuebkeWQrAogICAgZGVmIG9uX2RyYXdfcmVzdWx0KG5hbWUsIHRleHQpOgogICAgICAgIHBsdWdpbl9jb250ZXh0LmxvZ19pbmZvKGYi5oq95Y+W57uT5p6cOiB7bmFtZX0iKQoKICAgIHBsdWdpbl9jb250ZXh0Lm9uKCJkcmF3X3Jlc3VsdCIsIG9uX2RyYXdfcmVzdWx0KQoKICAgIHBsdWdpbl9jb250ZXh0LmxvZ19pbmZvKCLnpLrkvovmj5Lku7bliqDovb3lrozmiJAiKQo=",
+  "config": {
+    "enabled": true
+  },
+  "pages": [],
+  "libs": [],
+  "icons": []
+}

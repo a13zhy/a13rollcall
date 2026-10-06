@@ -1,0 +1,21 @@
+{
+  "meta": {
+    "name": "示例插件",
+    "version": "1.0.0",
+    "author": "A13",
+    "description": "这是一个示例插件，展示插件的基本结构、设置页面、日志系统和数据存储。",
+    "type": "general",
+    "api_version": 1,
+    "has_settings_page": true,
+    "settings_page_title": "示例插件",
+    "config": {
+      "welcome_message": "欢迎使用示例插件！",
+      "show_student_count": true
+    }
+  },
+  "code": "\ndef main(context):\n    context.show_message(\"示例插件\", \"这是一个示例插件！\\n\\n你可以在这里编写自己的插件逻辑。\")\n    students = context.get_students()\n    context.log(f\"当前有 {len(students)} 名学生\")\n    context.set_config(\"last_run\", str(datetime.now()))\n    return {\"status\": \"success\", \"student_count\": len(students)}\n\n\ndef build_settings_page(context):\n    from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QLineEdit\n    page = QWidget()\n    layout = QVBoxLayout(page)\n    layout.setContentsMargins(20, 20, 20, 20)\n    layout.setSpacing(12)\n\n    title = QLabel(\"示例插件设置\")\n    title.setStyleSheet(\"font-size: 18px; font-weight: 700; color: #0067c0;\")\n    layout.addWidget(title)\n\n    desc = QLabel(\"在这里可以配置示例插件的各项参数。\\n配置会自动保存到插件数据目录的 config.json 中。\")\n    desc.setWordWrap(True)\n    desc.setStyleSheet(\"color: #666666; font-size: 12px;\")\n    layout.addWidget(desc)\n\n    input_label = QLabel(\"欢迎语：\")\n    input_label.setStyleSheet(\"font-size: 13px; font-weight: 600;\")\n    layout.addWidget(input_label)\n\n    welcome_input = QLineEdit()\n    welcome_input.setText(context.get_config(\"welcome_message\", \"欢迎使用示例插件！\"))\n    layout.addWidget(welcome_input)\n\n    def save_config():\n        context.set_config(\"welcome_message\", welcome_input.text())\n        context.show_message(\"保存成功\", \"配置已保存！\")\n\n    save_btn = QPushButton(\"保存配置\")\n    save_btn.setStyleSheet(\"QPushButton { background: #0067c0; color: white; border: none; border-radius: 6px; padding: 10px 20px; font-weight: 600; }\")\n    save_btn.clicked.connect(save_config)\n    layout.addWidget(save_btn)\n\n    layout.addStretch()\n    return page\n\n\ndef on_enable(context):\n    context.log(\"插件已启用\")\n\n\ndef on_disable(context):\n    context.log(\"插件已禁用\")\n\n\ndef on_install(context):\n    context.log(\"插件已安装\")\n\n\ndef on_uninstall(context):\n    context.log(\"插件已卸载\")\n",
+  "config": {
+    "welcome_message": "欢迎使用示例插件！",
+    "show_student_count": true
+  }
+}

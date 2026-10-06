@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from tkinter.font import Font
 
-APP_EXE = "A13课堂点名系统.exe"
+APP_EXES = ["A13课堂点名程序.exe", "A13课堂点名系统.exe", "A13Rollcall.exe"]
 WIZARD_INI = "wizard_record.ini"
 STUDENT_FILE = "students.txt"
 TEXT_FILE = "texts.txt"
@@ -313,10 +313,15 @@ class WizardApp:
 
         self.root.destroy()
 
-        exe_path = os.path.join(BASE_DIR, APP_EXE)
+        exe_path = None
+        for name in APP_EXES:
+            cand = os.path.join(BASE_DIR, name)
+            if os.path.exists(cand):
+                exe_path = cand
+                break
         py_path = os.path.join(BASE_DIR, MAIN_PY)
         try:
-            if os.path.exists(exe_path):
+            if exe_path:
                 subprocess.Popen([exe_path, "--show-tip"], cwd=BASE_DIR)
             elif os.path.exists(py_path):
                 subprocess.Popen([sys.executable, py_path, "--show-tip"], cwd=BASE_DIR)

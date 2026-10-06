@@ -222,9 +222,24 @@ class PluginInstaller(QMainWindow):
             self._plugin_info['lib_count'] = lib_count
             self._plugin_info['libs_dir'] = libs_dir
 
+            # 检查图标资源
+            icons_dir = os.path.join(self._temp_dir, "icons")
+            has_icons = os.path.exists(icons_dir)
+            icon_count = 0
+            icon_files = []
+            if has_icons:
+                icon_files = [f for f in os.listdir(icons_dir) if f.endswith(('.ico', '.png', '.svg'))]
+                icon_count = len(icon_files)
+            self._plugin_info['has_icons'] = has_icons
+            self._plugin_info['icon_count'] = icon_count
+            self._plugin_info['icons_dir'] = icons_dir
+            self._plugin_info['icon_files'] = icon_files
+
             self._log(f"插件信息读取成功：{self._plugin_info['name']} v{self._plugin_info['version']}")
             if has_libs:
                 self._log(f"检测到 {lib_count} 个第三方依赖库")
+            if has_icons:
+                self._log(f"检测到 {icon_count} 个图标资源：{', '.join(icon_files[:5])}")
 
             self._show_plugin_info()
             self.install_btn.setEnabled(True)
@@ -290,6 +305,19 @@ class PluginInstaller(QMainWindow):
             """)
             self.info_content_layout.addWidget(libs_label)
 
+        # 图标资源
+        if info.get('has_icons', False):
+            icons_text = ", ".join(info.get('icon_files', [])[:5])
+            if len(info.get('icon_files', [])) > 5:
+                icons_text += f" 等{info['icon_count']}个"
+            icons_label = QLabel(f"🎨 包含 {info['icon_count']} 个图标资源：{icons_text}")
+            icons_label.setStyleSheet("""
+                QLabel { color: #8764da; font-size: 13px; padding: 8px;
+                         background: #f3e8ff; border-radius: 6px; }
+            """)
+            icons_label.setWordWrap(True)
+            self.info_content_layout.addWidget(icons_label)
+
         self.info_placeholder.hide()
         self.info_content.show()
 
@@ -338,6 +366,21 @@ class PluginInstaller(QMainWindow):
 
                 lib_items = os.listdir(plugin_libs_dir)
                 self._log(f"✅ 已安装 {len(lib_items)} 个依赖库：{', '.join(lib_items[:10])}")
+
+            self.progress_bar.setValue(65)
+
+            # 复制图标资源
+            if info.get('has_icons', False) and os.path.exists(info['icons_dir']):
+                self.status_label.setText("正在安装图标资源...")
+                plugin_icons_dir = os.path.join(plugin_data_dir, "icons")
+                self._log(f"图标目录：{plugin_icons_dir}")
+
+                if os.path.exists(plugin_icons_dir):
+                    shutil.rmtree(plugin_icons_dir)
+                shutil.copytree(info['icons_dir'], plugin_icons_dir)
+
+                icon_items = os.listdir(plugin_icons_dir)
+                self._log(f"✅ 已安装 {len(icon_items)} 个图标资源：{', '.join(icon_items[:10])}")
 
             self.progress_bar.setValue(80)
             self.status_label.setText("正在完成安装...")
@@ -392,8 +435,8 @@ class PluginInstaller(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
+    app.setFont(QFont("Microsoft YaHei", 10))
 
-    # 设置应用图标
     icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.ico")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))

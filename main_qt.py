@@ -1,9 +1,10 @@
-import sys
+﻿import sys
 import os
 import random
 import subprocess
 import configparser
 import math
+import traceback
 from datetime import datetime
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QFrame, QScrollArea, QGridLayout,
@@ -19,7 +20,10 @@ from PyQt5.QtGui import (QFont, QColor, QIcon, QPixmap, QPainter, QBrush, QPen,
                           QLinearGradient, QKeySequence, QDesktopServices, QCursor, QRadialGradient,
                           QTransform, QPalette)
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, "frozen", False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ICON_DIR = os.path.join(BASE_DIR, "icons")
 sys.path.insert(0, BASE_DIR)
 
@@ -323,23 +327,25 @@ class Win11Loader(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        center = self._size / 2
-        radius = self._size / 2 - 4
+        center = int(self._size / 2)
+        radius = int(self._size / 2 - 4)
         painter.setPen(QPen(QColor("#e5e5e5"), 3, Qt.SolidLine, Qt.RoundCap))
-        painter.drawEllipse(QPointF(center, center), radius, radius)
+        painter.drawEllipse(center - radius, center - radius, radius * 2, radius * 2)
         for i in range(3):
             start_angle = (self._angle + i * 120) * 16
             span_angle = 60 * 16
             color = QColor("#0067c0")
             color.setAlpha(255 - i * 60)
             painter.setPen(QPen(color, 3, Qt.SolidLine, Qt.RoundCap))
-            painter.drawArc(QRectF(center - radius, center - radius, radius * 2, radius * 2), start_angle, span_angle)
+            painter.drawArc(center - radius, center - radius, radius * 2, radius * 2, start_angle, span_angle)
         painter.end()
 
 
 class ParticleWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.setFocusPolicy(Qt.NoFocus)
         self._enabled = True
         self._particles = []
         for _ in range(30):
@@ -404,9 +410,59 @@ class DrawNameWidget(QWidget):
         self._name = "点击开始"
         self._is_drawing = False
         self._scale = 1.0
+        self._target_scale = 1.0
         self._font_size = 96
+        self._gradient_offset = 0
+        self._particles = []
+        self._easing_progress = 0
+        self._is_finishing = False
+        self._finish_start_time = 0
+        self._animation_enabled = True
+        self._animation_duration = 300
         self.setMinimumHeight(240)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._anim_timer = QTimer(self)
+        self._anim_timer.timeout.connect(self._update_animation)
+        self._anim_timer.start(16)
+
+    def set_animation_enabled(self, enabled):
+        self._animation_enabled = enabled
+        if not enabled:
+            self._is_drawing = False
+            self._particles = []
+            self._scale = 1.0
+            self._target_scale = 1.0
+        self.update()
+
+    def set_animation_duration(self, ms):
+        self._animation_duration = ms
+
+    def _update_animation(self):
+        if not self._animation_enabled:
+            self.update()
+            return
+        if self._is_drawing:
+            self._gradient_offset = (self._gradient_offset + 2) % 100
+        scale_diff = self._target_scale - self._scale
+        if abs(scale_diff) > 0.001:
+            self._scale += scale_diff * 0.15
+        else:
+            self._scale = self._target_scale
+        self._particles = [(x, y + vy, vx, vy, life - 1, size)
+                           for x, y, vx, vy, life, size in self._particles
+                           if life > 0]
+        self.update()
+
+    def _spawn_particles(self, count=5):
+        import random
+        for _ in range(count):
+            x = random.randint(50, self.width() - 50)
+            y = random.randint(50, self.height() - 50)
+            vx = random.uniform(-1, 1)
+            vy = random.uniform(-2, -0.5)
+            life = random.randint(20, 40)
+            size = random.randint(2, 5)
+            self._particles.append((x, y, vx, vy, life, size))
 
     def set_name(self, name):
         self._name = name
@@ -419,9 +475,12 @@ class DrawNameWidget(QWidget):
     def set_drawing(self, drawing):
         self._is_drawing = drawing
         if drawing:
-            self._scale = 1.08
+            self._target_scale = 1.08
+            self._is_finishing = False
         else:
-            self._scale = 1.0
+            self._target_scale = 1.0
+            self._is_finishing = True
+            self._spawn_particles(20)
         self.update()
 
     def paintEvent(self, event):
@@ -432,6 +491,17 @@ class DrawNameWidget(QWidget):
         h = self.height()
         name = self._name
         font_size = self._font_size
+
+        for px, py, pvx, pvy, plife, psize in self._particles:
+            alpha = int(255 * (plife / 40))
+            color = QColor(0, 103, 192, alpha)
+            painter.setBrush(QBrush(color))
+            painter.setPen(Qt.NoPen)
+            px_int = int(px)
+            py_int = int(py)
+            psize_int = int(max(1, psize))
+            painter.drawEllipse(px_int - psize_int, py_int - psize_int, psize_int * 2, psize_int * 2)
+
         font = QFont("Microsoft YaHei", int(font_size * self._scale), QFont.Bold)
         painter.setFont(font)
         text_width = painter.fontMetrics().horizontalAdvance(name)
@@ -440,21 +510,30 @@ class DrawNameWidget(QWidget):
             font = QFont("Microsoft YaHei", int(font_size * self._scale), QFont.Bold)
             painter.setFont(font)
             text_width = painter.fontMetrics().horizontalAdvance(name)
+
         if self._is_drawing:
             gradient = QLinearGradient(0, 0, w, 0)
-            gradient.setColorAt(0, QColor("#005a9e"))
-            gradient.setColorAt(0.3, QColor("#0067c0"))
-            gradient.setColorAt(0.5, QColor("#0078d4"))
-            gradient.setColorAt(0.7, QColor("#0067c0"))
-            gradient.setColorAt(1, QColor("#005a9e"))
+            offset = self._gradient_offset / 100.0
+            gradient.setColorAt(max(0, offset - 0.3), QColor("#005a9e"))
+            gradient.setColorAt(max(0, offset - 0.15), QColor("#0067c0"))
+            gradient.setColorAt(offset, QColor("#0078d4"))
+            gradient.setColorAt(min(1, offset + 0.15), QColor("#0067c0"))
+            gradient.setColorAt(min(1, offset + 0.3), QColor("#005a9e"))
             painter.setPen(QPen(gradient, 1))
         else:
+            if self._is_finishing and self._scale > 1.02:
+                glow_color = QColor(0, 120, 212, 80)
+                painter.setPen(QPen(glow_color, 8))
+                painter.drawText(QRectF(0, 0, w, h - 20), Qt.AlignCenter, name)
             painter.setPen(QColor("#0067c0"))
+
         painter.drawText(QRectF(0, 0, w, h - 20), Qt.AlignCenter, name)
+
         if self._is_drawing:
             painter.setPen(QColor("#0067c0"))
             painter.setFont(QFont("Microsoft YaHei", 13, QFont.Bold))
             painter.drawText(QRectF(0, h - 28, w, 24), Qt.AlignCenter, "◆ 抽取中 ◆")
+
         painter.end()
 
 
@@ -956,6 +1035,10 @@ class SettingsDialog(QDialog):
         self.resize(1000, 700)
         self._current_page = 0
         self._setup_ui()
+        try:
+            self.config_mgr.backup_current()
+        except Exception:
+            pass
         self._load_values()
 
     def _setup_ui(self):
@@ -1028,7 +1111,7 @@ class SettingsDialog(QDialog):
         categories = [
             ("系统", "settings", [("班级设置", "class"), ("应用信息", "info"), ("启动选项", "startup")]),
             ("外观", "palette", [("主题", "theme"), ("显示效果", "display"), ("字体", "font"), ("动画效果", "animation"), ("窗口样式", "window")]),
-            ("抽取", "draw", [("抽取模式", "mode"), ("抽取规则", "rules"), ("参数", "params"), ("自动抽取", "auto_draw"), ("权重系统", "weight")]),
+            ("抽取", "draw", [("抽取模式", "mode"), ("抽取规则", "rules"), ("参数", "params"), ("自动抽取", "auto_draw"), ("权重系统", "weight"), ("语音朗读", "tts")]),
             ("课文", "book", [("课文抽取", "text_extract"), ("课文显示", "text_display"), ("课文进度", "text_progress")]),
             ("标记", "check", [("背诵标记", "mark"), ("积分系统", "score")]),
             ("快捷键", "keyboard", [("快捷键列表", "shortcuts"), ("快捷键设置", "shortcut_settings")]),
@@ -1198,6 +1281,7 @@ class SettingsDialog(QDialog):
             ("params", self._build_params_page),
             ("auto_draw", self._build_auto_draw_page),
             ("weight", self._build_weight_page),
+            ("tts", self._build_tts_page),
             ("text_extract", self._build_text_extract_page),
             ("text_display", self._build_text_display_page),
             ("text_progress", self._build_text_progress_page),
@@ -1571,6 +1655,164 @@ class SettingsDialog(QDialog):
         self._add_setting_row(layout, "轮次重置", self.weight_reset_round, "每轮抽取开始时重置所有学生的权重为默认值。")
         layout.addStretch()
         return scroll, layout
+
+    def _build_tts_page(self):
+        scroll, layout = self._make_scroll_page()
+        self._add_section(layout, "语音朗读（离线）")
+        self.tts_enable = QCheckBox("抽取后朗读学生姓名")
+        self._add_setting_row(layout, "朗读开关", self.tts_enable, "抽取到学生后，使用 Windows 离线语音（SAPI）朗读「某某同学」。完全离线，无需联网。")
+        self.tts_speak_text = QCheckBox("同时朗读课文标题")
+        self._add_setting_row(layout, "朗读课文", self.tts_speak_text, "朗读姓名后接着朗读抽到的课文标题，便于学生知道要背哪一段。")
+        self.tts_rate = QSlider(Qt.Horizontal)
+        self.tts_rate.setRange(100, 300)
+        self.tts_rate.setValue(150)
+        self.tts_rate_label = QLabel("150")
+        self.tts_rate.valueChanged.connect(lambda v: self.tts_rate_label.setText(str(v)))
+        rate_row = QHBoxLayout()
+        rate_row.addWidget(self.tts_rate)
+        rate_row.addWidget(self.tts_rate_label)
+        rate_wrap = QWidget()
+        rate_wrap.setLayout(rate_row)
+        self._add_setting_row(layout, "朗读语速", rate_wrap, "数值越大读得越快。建议 130~180。")
+        self.tts_test_btn = QPushButton("试听一句")
+        self.tts_test_btn.setStyleSheet("QPushButton { background: #0067c0; color: white; border: none; border-radius: 6px; padding: 8px 20px; font-weight: 600; }")
+        self.tts_test_btn.clicked.connect(self._test_tts)
+        self._add_setting_row(layout, "试听", self.tts_test_btn, "立即朗读一句示例，检查语音是否正常。")
+        layout.addStretch()
+        return scroll, layout
+
+    def _test_tts(self):
+        try:
+            import pyttsx3
+        except ImportError:
+            QMessageBox.information(self, "语音朗读",
+                "当前电脑未安装离线语音组件（pyttsx3），朗读功能暂不可用。\n\n"
+                "这是可选功能，不影响点名、统计等其他所有功能正常使用。")
+            return
+        try:
+            engine = pyttsx3.init()
+            engine.setProperty("rate", self.tts_rate.value())
+            engine.say("同学们好，现在开始点名，张三同学，背诵 第一课。")
+            engine.runAndWait()
+        except Exception:
+            QMessageBox.information(self, "语音朗读", "系统语音组件不可用，朗读功能暂不可用。不影响其他功能。")
+
+    def _fmt_release_time(self, iso):
+        try:
+            import datetime as _dt
+            dt = _dt.datetime.fromisoformat(iso.replace("Z", "+00:00"))
+            dt = dt + _dt.timedelta(hours=8)
+            return dt.strftime("%Y-%m-%d %H:%M")
+        except Exception:
+            return iso or "未知"
+
+    def _show_update_dialog(self, remote, local_ver, has_new):
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame
+        dlg = QDialog(self)
+        dlg.setWindowTitle("软件更新")
+        dlg.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+        dlg.resize(640, 560)
+        dlg.setStyleSheet("""
+            QDialog { background: #f3f6fa; }
+            QLabel { font-family: 'Microsoft YaHei'; }
+            #dlg_title { font-size: 21px; font-weight: 800; color: #1a1a1a; }
+            #dlg_sub  { font-size: 12px; color: #666666; }
+            #meta     { font-size: 13px; color: #333333; }
+            #meta_key { color: #0067c0; font-weight: 600; }
+        """)
+        root = QVBoxLayout(dlg)
+        root.setContentsMargins(28, 24, 28, 20)
+        root.setSpacing(10)
+
+        title = QLabel(f"发现新版本 V{remote['ver']}！" if has_new else f"当前已是最新版本 V{local_ver}")
+        title.setObjectName("dlg_title")
+        root.addWidget(title)
+
+        sub = QLabel(remote.get("name") or remote.get("tag_name") or "")
+        sub.setObjectName("dlg_sub")
+        sub.setWordWrap(True)
+        root.addWidget(sub)
+
+        meta = QLabel(
+            f"<span id='meta_key'>作者</span>　{remote['author']}　　"
+            f"<span id='meta_key'>发布时间</span>　{remote['time']}　　"
+            f"<span id='meta_key'>当前版本</span>　V{local_ver}")
+        meta.setObjectName("meta")
+        root.addWidget(meta)
+
+        box = QFrame()
+        box.setStyleSheet("QFrame { background: #ffffff; border: 1px solid #e3e8ef; border-radius: 10px; }")
+        bl = QVBoxLayout(box)
+        bl.setContentsMargins(14, 12, 14, 12)
+        bl.setSpacing(8)
+        bl.addWidget(QLabel("📝 更新说明"))
+        mv = MarkdownView(box)
+        mv.setMarkdown(remote.get("body") or "（暂无更新说明）")
+        bl.addWidget(mv, 1)
+        root.addWidget(box, 1)
+
+        how = QFrame()
+        how.setStyleSheet("QFrame { background: #eaf2fc; border: 1px solid #d4e4f5; border-radius: 8px; }")
+        hl = QVBoxLayout(how)
+        hl.setContentsMargins(14, 10, 14, 10)
+        hl.setSpacing(2)
+        hl.addWidget(QLabel("🔄 更新方法"))
+        hl.addWidget(QLabel("1. 点击下方「前往下载」打开下载页；\n2. 下载安装包（或 zip）并解压；\n3. 覆盖安装到原目录（如有自定义名单/课文，建议先备份）；\n4. 重新打开程序，完成更新。"))
+        root.addWidget(how)
+
+        btns = QHBoxLayout()
+        btns.addStretch()
+        close_btn = QPushButton("关闭")
+        close_btn.setStyleSheet("QPushButton { background: white; color: #333; border: 1px solid #ccc; border-radius: 6px; padding: 8px 22px; }")
+        close_btn.clicked.connect(dlg.reject)
+        dl_btn = QPushButton("前往下载")
+        dl_btn.setStyleSheet("QPushButton { background: #0067c0; color: white; border: none; border-radius: 6px; padding: 8px 26px; font-weight: 700; }")
+        dl_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(remote["url"])))
+        btns.addWidget(close_btn)
+        btns.addSpacing(8)
+        btns.addWidget(dl_btn)
+        root.addLayout(btns)
+        dlg.exec_()
+
+    def _do_check_update(self):
+        btn = self.sender()
+        if btn:
+            btn.setEnabled(False)
+            btn.setText("正在检查...")
+        QApplication.processEvents()
+        try:
+            import urllib.request, json as _json, re
+            req = urllib.request.Request(
+                "https://api.github.com/repos/a13zhy/a13rollcall/releases/latest",
+                headers={"User-Agent": "A13Rollcall", "Accept": "application/vnd.github.v3+json"})
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                data = _json.loads(resp.read().decode("utf-8"))
+            remote_tag = (data.get("tag_name") or "").lstrip("vV").strip()
+            assets = data.get("assets") or []
+            dl_url = ""
+            if assets:
+                dl_url = assets[0].get("browser_download_url") or ""
+            remote = {
+                "ver": remote_tag,
+                "name": data.get("name") or "",
+                "author": (data.get("author") or {}).get("login") or "a13zhy",
+                "time": self._fmt_release_time(data.get("published_at") or data.get("created_at") or ""),
+                "body": data.get("body") or "（暂无更新说明）",
+                "url": dl_url or data.get("html_url") or WEBSITE_URL,
+            }
+            local_ver = str(self.config_mgr.get("app", "version") or "6.8")
+            def ver_tuple(s):
+                nums = re.findall(r"\d+", s)
+                return tuple(int(x) for x in nums) if nums else (0,)
+            has_new = ver_tuple(remote_tag) > ver_tuple(local_ver)
+            self._show_update_dialog(remote, local_ver, has_new)
+        except Exception:
+            QMessageBox.information(self, "检查更新",
+                "无法连接更新服务器。\n\n可能是当前电脑未联网，或网络受限。\n可点击「前往官网下载最新版」手动查看。")
+        finally:
+            if btn:
+                btn.setEnabled(True)
+                btn.setText("检查更新")
 
     def _build_text_progress_page(self):
         scroll, layout = self._make_scroll_page()
@@ -2291,7 +2533,7 @@ class SettingsDialog(QDialog):
         check_btn.setObjectName("primary")
         check_btn.setMinimumHeight(44)
         check_btn.setMinimumWidth(200)
-        check_btn.clicked.connect(lambda: QMessageBox.information(self, "检查更新", "当前已是最新版本 V6.8！"))
+        check_btn.clicked.connect(self._do_check_update)
         layout.addWidget(check_btn)
         layout.addSpacing(10)
         web_btn = QPushButton("前往官网下载最新版")
@@ -2472,6 +2714,59 @@ class SettingsDialog(QDialog):
             self.exp_smooth.setChecked(bool(self.config_mgr.get("experimental", "smooth_scroll")))
         except Exception:
             pass
+        try:
+            self.anim_draw_check.setChecked(bool(self.config_mgr.get("animation", "draw_enabled")))
+        except Exception:
+            self.anim_draw_check.setChecked(True)
+        try:
+            self.anim_result_check.setChecked(bool(self.config_mgr.get("animation", "result_enabled")))
+        except Exception:
+            self.anim_result_check.setChecked(True)
+        try:
+            self.anim_transition_check.setChecked(bool(self.config_mgr.get("animation", "transition_enabled")))
+        except Exception:
+            self.anim_transition_check.setChecked(True)
+        try:
+            self.anim_duration.setValue(int(self.config_mgr.get("animation", "duration_ms")))
+        except Exception:
+            self.anim_duration.setValue(300)
+        try:
+            easing = self.config_mgr.get("animation", "easing")
+            self.anim_easing.setCurrentIndex(["linear", "ease_in", "ease_out", "ease_in_out", "elastic"].index(easing))
+        except Exception:
+            self.anim_easing.setCurrentIndex(3)
+        try:
+            self.tts_enable.setChecked(bool(self.config_mgr.get("tts", "enabled")))
+            self.tts_speak_text.setChecked(bool(self.config_mgr.get("tts", "speak_text")))
+            self.tts_rate.setValue(int(self.config_mgr.get("tts", "rate") or 150))
+        except Exception:
+            pass
+        try:
+            self.weight_enable.setChecked(bool(self.config_mgr.get("draw", "dynamic_weight")))
+            self.weight_unlearned.setValue(int(self.config_mgr.get("draw", "rate_unlearned") or 3))
+            self.weight_familiar.setValue(int(self.config_mgr.get("draw", "rate_familiar") or 2))
+            self.weight_mastered.setValue(int(self.config_mgr.get("draw", "rate_mastered") or 1))
+        except Exception:
+            pass
+        try:
+            self.mark_toast.setChecked(bool(self.config_mgr.get("ui", "mark_toast")) if self.config_mgr.get("ui", "mark_toast") is not None else True)
+        except Exception:
+            pass
+        try:
+            self.window_rounded_check.setChecked(bool(self.config_mgr.get("ui", "rounded_window")))
+            self.window_radius.setValue(int(self.config_mgr.get("ui", "window_radius") or 12))
+            self.window_shadow_check.setChecked(bool(self.config_mgr.get("ui", "window_shadow")))
+            self.window_topmost_check.setChecked(bool(self.config_mgr.get("ui", "window_topmost")))
+            self.window_minimize_mini.setChecked(bool(self.config_mgr.get("ui", "mini_on_minimize")))
+        except Exception:
+            pass
+        try:
+            self.startup_quick_check.setChecked(bool(self.config_mgr.get("startup", "show_quick")))
+            self.startup_remember_check.setChecked(bool(self.config_mgr.get("startup", "remember_choice")))
+            self.startup_countdown.setValue(int(self.config_mgr.get("startup", "countdown_sec") or 3))
+            self.startup_wizard_check.setChecked(bool(self.config_mgr.get("startup", "force_wizard")) if self.config_mgr.get("startup", "force_wizard") is not None else True)
+        except Exception:
+            pass
 
     def _save(self):
         try:
@@ -2499,6 +2794,32 @@ class SettingsDialog(QDialog):
             self.config_mgr.set(self.exp_sound.isChecked(), "draw", "sound_enabled")
             self.config_mgr.set(self.exp_dpi.isChecked(), "experimental", "dpi_optimization")
             self.config_mgr.set(self.exp_smooth.isChecked(), "experimental", "smooth_scroll")
+            self.config_mgr.set(self.anim_draw_check.isChecked(), "animation", "draw_enabled")
+            self.config_mgr.set(self.anim_result_check.isChecked(), "animation", "result_enabled")
+            self.config_mgr.set(self.anim_transition_check.isChecked(), "animation", "transition_enabled")
+            self.config_mgr.set(self.anim_duration.value(), "animation", "duration_ms")
+            self.config_mgr.set(["linear", "ease_in", "ease_out", "ease_in_out", "elastic"][self.anim_easing.currentIndex()], "animation", "easing")
+            self.config_mgr.set(self.tts_enable.isChecked(), "tts", "enabled")
+            self.config_mgr.set(self.tts_speak_text.isChecked(), "tts", "speak_text")
+            self.config_mgr.set(self.tts_rate.value(), "tts", "rate")
+            self.config_mgr.set(self.weight_enable.isChecked(), "draw", "dynamic_weight")
+            self.config_mgr.set(self.weight_enable.isChecked(), "draw", "dynamic_focus")
+            self.config_mgr.set(self.weight_unlearned.value(), "draw", "rate_unlearned")
+            self.config_mgr.set(self.weight_familiar.value(), "draw", "rate_familiar")
+            self.config_mgr.set(self.weight_mastered.value(), "draw", "rate_mastered")
+            try:
+                self.config_mgr.set(self.mark_toast.isChecked(), "ui", "mark_toast")
+            except Exception:
+                pass
+            self.config_mgr.set(self.window_rounded_check.isChecked(), "ui", "rounded_window")
+            self.config_mgr.set(self.window_radius.value(), "ui", "window_radius")
+            self.config_mgr.set(self.window_shadow_check.isChecked(), "ui", "window_shadow")
+            self.config_mgr.set(self.window_topmost_check.isChecked(), "ui", "window_topmost")
+            self.config_mgr.set(self.window_minimize_mini.isChecked(), "ui", "mini_on_minimize")
+            self.config_mgr.set(self.startup_quick_check.isChecked(), "startup", "show_quick")
+            self.config_mgr.set(self.startup_remember_check.isChecked(), "startup", "remember_choice")
+            self.config_mgr.set(self.startup_countdown.value(), "startup", "countdown_sec")
+            self.config_mgr.set(self.startup_wizard_check.isChecked(), "startup", "force_wizard")
             self.config_mgr.save_config()
         except Exception as e:
             print(f"保存设置失败: {e}")
@@ -2733,17 +3054,54 @@ class StatsDialog(QDialog):
         super().__init__(parent)
         self.data_mgr = data_mgr
         self.setWindowTitle("数据统计")
-        self.setMinimumSize(720, 560)
+        self.setMinimumSize(900, 750)
+        self.resize(950, 800)
         self._setup_ui()
         self._load_data()
 
     def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(16)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(20, 16, 20, 16)
+        outer.setSpacing(12)
+
+        top_row = QHBoxLayout()
         title = QLabel("数据统计")
         title.setStyleSheet("font-size: 22px; font-weight: 800; color: #0067c0;")
-        layout.addWidget(title)
+        top_row.addWidget(title)
+        top_row.addStretch()
+        self.scope_label = QLabel("当前视图：全部轮次")
+        self.scope_label.setStyleSheet("font-size: 12px; color: #107c10; font-weight: 600;")
+        top_row.addWidget(self.scope_label)
+        outer.addLayout(top_row)
+
+        rounds_bar = QFrame()
+        rounds_bar.setStyleSheet("background: #ffffff; border-radius: 10px; border: 1px solid #e5e5e5;")
+        rounds_layout = QHBoxLayout(rounds_bar)
+        rounds_layout.setContentsMargins(16, 12, 16, 12)
+        rounds_layout.setSpacing(10)
+        rounds_layout.addWidget(QLabel("轮次："))
+        self.round_selector = QComboBox()
+        self.round_selector.setStyleSheet("QComboBox { padding: 6px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; min-width: 230px; }")
+        self.round_selector.currentIndexChanged.connect(self._on_round_selected)
+        rounds_layout.addWidget(self.round_selector)
+        delete_round_btn = QPushButton("删除此轮")
+        delete_round_btn.setStyleSheet("QPushButton { background: #c42b1c; color: white; border: none; border-radius: 6px; padding: 8px 14px; font-weight: 600; } QPushButton:hover { background: #a02010; }")
+        delete_round_btn.clicked.connect(self._delete_round)
+        rounds_layout.addWidget(delete_round_btn)
+        rounds_layout.addStretch()
+        self.round_info_label = QLabel("共 0 轮")
+        self.round_info_label.setStyleSheet("font-size: 12px; color: #666;")
+        rounds_layout.addWidget(self.round_info_label)
+        outer.addWidget(rounds_bar)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(14)
+
         summary_card = QFrame()
         summary_card.setStyleSheet("background: #ffffff; border-radius: 10px; border: 1px solid #e5e5e5;")
         sc = QHBoxLayout(summary_card)
@@ -2760,7 +3118,7 @@ class StatsDialog(QDialog):
             col = QVBoxLayout()
             val = QLabel("0")
             val.setAlignment(Qt.AlignCenter)
-            val.setStyleSheet(f"font-size: 28px; font-weight: 800; color: {color};")
+            val.setStyleSheet(f"font-size: 26px; font-weight: 800; color: {color};")
             col.addWidget(val)
             lbl = QLabel(label_text)
             lbl.setAlignment(Qt.AlignCenter)
@@ -2769,6 +3127,42 @@ class StatsDialog(QDialog):
             sc.addLayout(col)
             self.summary_labels[key] = val
         layout.addWidget(summary_card)
+
+        from stats_charts import PieChartWidget, BarChartWidget, StatsChartCard
+        charts_row = QHBoxLayout()
+        charts_row.setSpacing(14)
+        self.pie_chart = PieChartWidget("背诵状态分布")
+        self.pie_chart.setMinimumHeight(240)
+        charts_row.addWidget(StatsChartCard("", self.pie_chart), 1)
+        self.bar_chart = BarChartWidget("学生抽取次数", max_items=10)
+        self.bar_chart.setMinimumHeight(240)
+        self.bar_chart.set_bar_color("#0067c0")
+        charts_row.addWidget(StatsChartCard("", self.bar_chart), 1)
+        layout.addLayout(charts_row)
+
+        self.score_chart = BarChartWidget("积分排名 Top 10", max_items=10)
+        self.score_chart.setMinimumHeight(220)
+        self.score_chart.set_bar_color("#8764b8")
+        layout.addWidget(StatsChartCard("", self.score_chart))
+
+        self.text_bar_chart = BarChartWidget("课文抽取次数", max_items=8)
+        self.text_bar_chart.setMinimumHeight(200)
+        self.text_bar_chart.set_bar_color("#ca5010")
+        layout.addWidget(StatsChartCard("", self.text_bar_chart))
+
+        records_label = QLabel("抽取记录")
+        records_label.setStyleSheet("font-size: 15px; font-weight: 700; color: #333333;")
+        layout.addWidget(records_label)
+        self.records_table = QTableWidget()
+        self.records_table.setColumnCount(6)
+        self.records_table.setHorizontalHeaderLabels(["时间", "学生", "课文", "段落", "状态", "轮次"])
+        self.records_table.horizontalHeader().setStretchLastSection(True)
+        self.records_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.records_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.records_table.setMaximumHeight(220)
+        self.records_table.setStyleSheet("QTableWidget { background: white; border: 1px solid #e5e5e5; border-radius: 8px; gridline-color: #f0f0f0; font-size: 12px; } QHeaderView::section { background: #f8f8f8; padding: 6px; border: none; font-weight: 600; }")
+        layout.addWidget(self.records_table)
+
         table_label = QLabel("学生详细统计")
         table_label.setStyleSheet("font-size: 15px; font-weight: 700; color: #333333;")
         layout.addWidget(table_label)
@@ -2779,7 +3173,12 @@ class StatsDialog(QDialog):
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setStyleSheet("QTableWidget { background: white; border: 1px solid #e5e5e5; border-radius: 8px; gridline-color: #f0f0f0; } QHeaderView::section { background: #f8f8f8; padding: 8px; border: none; font-weight: 600; }")
+        self.table.setMinimumHeight(240)
         layout.addWidget(self.table, 1)
+
+        scroll.setWidget(container)
+        outer.addWidget(scroll, 1)
+
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         export_btn = QPushButton("导出统计数据")
@@ -2790,9 +3189,21 @@ class StatsDialog(QDialog):
         close_btn.setStyleSheet("QPushButton { background: #f0f0f0; color: #333333; border: none; border-radius: 6px; padding: 10px 24px; font-weight: 600; } QPushButton:hover { background: #e0e0e0; }")
         close_btn.clicked.connect(self.close)
         btn_layout.addWidget(close_btn)
-        layout.addLayout(btn_layout)
+        outer.addLayout(btn_layout)
 
     def _load_data(self):
+        self._load_rounds_to_selector()
+        self._render_view(-1)
+
+    def _render_view(self, round_id):
+        if round_id and round_id != -1:
+            self._render_single_round(round_id)
+        else:
+            self._render_all_rounds()
+
+    def _render_all_rounds(self):
+        self.scope_label.setText("当前视图：全部轮次")
+        self.scope_label.setStyleSheet("font-size: 12px; color: #107c10; font-weight: 600;")
         stats = self.data_mgr.get_all_stats()
         self.table.setRowCount(len(stats))
         total_draw = total_mastered = total_familiar = total_unlearned = 0
@@ -2815,6 +3226,55 @@ class StatsDialog(QDialog):
         self.summary_labels["unlearned"].setText(str(total_unlearned))
         avg = total_score // len(stats) if stats else 0
         self.summary_labels["avg_score"].setText(str(avg))
+        self.pie_chart.set_data([("已背过", total_mastered), ("未背熟", total_familiar), ("未背过", total_unlearned)])
+        draw_data = sorted([(n, d["draw_count"]) for n, d in stats.items()], key=lambda x: x[1], reverse=True)
+        self.bar_chart.set_data(draw_data)
+        score_data = sorted([(n, d["score"]) for n, d in stats.items()], key=lambda x: x[1], reverse=True)
+        self.score_chart.set_data(score_data)
+        text_stats = self.data_mgr.get_text_stats()
+        self.text_bar_chart.set_data(sorted([(t, d["total"]) for t, d in text_stats.items()], key=lambda x: x[1], reverse=True))
+        self._fill_records_table(self.data_mgr.get_draw_records()[:100], -1)
+
+    def _render_single_round(self, round_id):
+        detail = self.data_mgr.get_round_detail(round_id)
+        if not detail:
+            return
+        self.scope_label.setText(f"当前视图：第 {round_id} 轮")
+        self.scope_label.setStyleSheet("font-size: 12px; color: #ca5010; font-weight: 600;")
+        records = detail.get("records", [])
+        total = len(records)
+        mastered = sum(1 for r in records if r.get("status") == "已背过")
+        familiar = sum(1 for r in records if r.get("status") == "未背熟")
+        unlearned = sum(1 for r in records if r.get("status") == "未背过")
+        self.summary_labels["total"].setText(str(total))
+        self.summary_labels["mastered"].setText(str(mastered))
+        self.summary_labels["familiar"].setText(str(familiar))
+        self.summary_labels["unlearned"].setText(str(unlearned))
+        self.summary_labels["avg_score"].setText("-")
+        self.pie_chart.set_data([("已背过", mastered), ("未背熟", familiar), ("未背过", unlearned)])
+        per_student = {}
+        per_text = {}
+        for r in records:
+            s = r.get("student", "")
+            per_student[s] = per_student.get(s, 0) + 1
+            t = r.get("text", "") or "未指定"
+            per_text[t] = per_text.get(t, 0) + 1
+        self.bar_chart.set_data(sorted(per_student.items(), key=lambda x: x[1], reverse=True))
+        self.text_bar_chart.set_data(sorted(per_text.items(), key=lambda x: x[1], reverse=True))
+        self.score_chart.set_data([])
+        self.table.setRowCount(0)
+        self._fill_records_table(list(reversed(records)), round_id)
+
+    def _fill_records_table(self, records, round_id):
+        self.records_table.setRowCount(len(records))
+        for row, rec in enumerate(records):
+            rid = round_id if round_id and round_id != -1 else rec.get("round_id", 0)
+            self.records_table.setItem(row, 0, QTableWidgetItem(rec.get("time", "")))
+            self.records_table.setItem(row, 1, QTableWidgetItem(rec.get("student", "")))
+            self.records_table.setItem(row, 2, QTableWidgetItem(rec.get("text", "")))
+            self.records_table.setItem(row, 3, QTableWidgetItem(rec.get("paragraph", "")))
+            self.records_table.setItem(row, 4, QTableWidgetItem(rec.get("status", "")))
+            self.records_table.setItem(row, 5, QTableWidgetItem(f"第{rid}轮"))
 
     def _export(self):
         from datetime import datetime
@@ -2837,6 +3297,48 @@ class StatsDialog(QDialog):
             QMessageBox.information(self, "导出成功", f"统计数据已导出到：\n{path}")
         except Exception as e:
             QMessageBox.warning(self, "导出失败", f"导出失败：{str(e)}")
+
+    def _load_rounds_to_selector(self):
+        self.round_selector.blockSignals(True)
+        self.round_selector.clear()
+        rounds = self.data_mgr.get_all_rounds()
+        self.round_selector.addItem("全部轮次", -1)
+        for r in reversed(rounds):
+            start_time = r.get("start_time", "")[:16] if r.get("start_time") else "未知"
+            label = f"第 {r['round_id']} 轮 · {start_time} · {r['total']}人"
+            self.round_selector.addItem(label, r["round_id"])
+        self.round_info_label.setText(f"共 {len(rounds)} 轮")
+        self.round_selector.blockSignals(False)
+
+    def _on_round_selected(self, index):
+        round_id = self.round_selector.currentData()
+        self._render_view(round_id if round_id is not None else -1)
+
+    def _restore_round(self):
+        round_id = self.round_selector.currentData()
+        if round_id == -1:
+            QMessageBox.warning(self, "提示", "请先选择一个具体轮次")
+            return
+        reply = QMessageBox.question(self, "确认恢复",
+            f"确定要恢复到第 {round_id} 轮吗？\n\n将关闭统计窗口并把主界面切回该轮次视图。",
+            QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            QMessageBox.information(self, "恢复成功", f"已恢复到第 {round_id} 轮")
+            self.close()
+
+    def _delete_round(self):
+        round_id = self.round_selector.currentData()
+        if round_id == -1:
+            QMessageBox.warning(self, "提示", "请先选择一个具体轮次")
+            return
+        reply = QMessageBox.question(self, "确认删除",
+            f"确定要删除第 {round_id} 轮的记录吗？\n此操作不可恢复。",
+            QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            self.data_mgr.delete_round(round_id)
+            self._load_rounds_to_selector()
+            self._render_view(-1)
+            QMessageBox.information(self, "删除成功", f"第 {round_id} 轮记录已删除")
 
 
 class RankingDialog(QDialog):
@@ -2963,6 +3465,8 @@ class MainWindow(QMainWindow):
         self.draw_engine = DrawEngine(self.data_mgr, self.config_mgr)
         self.echo_hole = EchoHole(self.config_mgr)
         self.plugin_mgr = PluginManager(self.config_mgr)
+        from operation_history import OperationHistoryManager, MarkOperation
+        self.history_mgr = OperationHistoryManager(max_history=50)
         self._is_drawing = False
         self._last_draw_result = None
         self._quick_mode = False
@@ -2978,10 +3482,22 @@ class MainWindow(QMainWindow):
         self._current_text_idx = 0
         self._no_repeat = True
         self._draw_mode = "auto"
+        self._ui_scale = 1.0
+        self._min_scale = 0.7
+        self._max_scale = 1.5
+        self._scale_step = 0.1
+        self._round_active = False
+        self._round_id = None
+        self._round_records = []
+        self._round_start_time = None
         self._setup_window()
         self._setup_ui()
         self._load_data()
         self._apply_settings()
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.timeout.connect(self._autosave)
+        self._autosave_timer.start(30000)
+        self._last_autosave_time = None
         QTimer.singleShot(500, self._startup_plugins)
         if show_guide:
             QTimer.singleShot(1500, self._show_guide)
@@ -2992,16 +3508,32 @@ class MainWindow(QMainWindow):
                 return
             self.plugin_mgr.load_all_plugins()
             plugins = self.plugin_mgr.get_enabled_plugins()
+            loaded_count = 0
+            error_plugins = []
             for plugin in plugins:
                 name = plugin["meta"]["name"]
                 try:
                     context = self.plugin_mgr.get_context(name, self)
                     self.plugin_mgr._call_lifecycle(name, "on_enable")
+                    result, error = self.plugin_mgr.execute_plugin(name, self, "main")
+                    if error:
+                        print(f"插件 {name} 执行警告：{error}")
+                        error_plugins.append((name, error))
+                    else:
+                        loaded_count += 1
                 except Exception as e:
                     print(f"插件 {name} 启动警告：{e}")
-            print(f"插件自启动完成，共加载 {len(plugins)} 个插件")
+                    import traceback
+                    traceback.print_exc()
+                    error_plugins.append((name, str(e)))
+            print(f"插件自启动完成，共加载 {loaded_count}/{len(plugins)} 个插件")
+            if error_plugins:
+                error_msg = "\n".join([f"• {name}: {err[:100]}" for name, err in error_plugins])
+                self._show_toast(f"⚠️ {len(error_plugins)} 个插件启动失败，详情请查看日志", 4000)
         except Exception as e:
             print(f"插件自启动失败：{e}")
+            import traceback
+            traceback.print_exc()
 
     def _get_class_name(self):
         try:
@@ -3034,6 +3566,11 @@ class MainWindow(QMainWindow):
         self.move((screen.width() - w) // 2, (screen.height() - h) // 2)
         try:
             self.setWindowIcon(QIcon(os.path.join(BASE_DIR, "app.ico")))
+        except Exception:
+            pass
+        try:
+            if self.config_mgr.get("ui", "window_topmost"):
+                self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
         except Exception:
             pass
 
@@ -3190,6 +3727,8 @@ class MainWindow(QMainWindow):
         self.text_list = QListWidget()
         self.text_list.setMaximumHeight(160)
         self.text_list.itemClicked.connect(self._select_text)
+        self.text_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.text_list.customContextMenuRequested.connect(self._show_text_context_menu)
         sb_layout.addWidget(self.text_list)
         sb_layout.addStretch()
         body.addWidget(sb_scroll)
@@ -3227,6 +3766,12 @@ class MainWindow(QMainWindow):
 
         ctrl_layout = QHBoxLayout()
         ctrl_layout.setSpacing(12)
+        self.new_round_btn = QPushButton("新建轮次")
+        self.new_round_btn.setObjectName("primary")
+        self.new_round_btn.setMinimumHeight(60)
+        self.new_round_btn.setStyleSheet("QPushButton#primary { background: #107c10; color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; } QPushButton#primary:hover { background: #0e6c0e; }")
+        self.new_round_btn.clicked.connect(self._start_new_round)
+        ctrl_layout.addWidget(self.new_round_btn, 1)
         self.draw_btn = QPushButton("开始抽取")
         self.draw_btn.setObjectName("drawbig")
         self.draw_btn.setMinimumHeight(60)
@@ -3257,9 +3802,15 @@ class MainWindow(QMainWindow):
         st = QVBoxLayout(stat_card)
         st.setContentsMargins(18, 16, 18, 16)
         st.setSpacing(8)
+        st_header = QHBoxLayout()
         st_label = QLabel("本轮统计")
         st_label.setObjectName("subtitle")
-        st.addWidget(st_label)
+        st_header.addWidget(st_label)
+        st_header.addStretch()
+        self.round_title_label = QLabel("未开始")
+        self.round_title_label.setStyleSheet("font-size: 12px; font-weight: 700; color: #c42b1c;")
+        st_header.addWidget(self.round_title_label)
+        st.addLayout(st_header)
         stats_grid = QGridLayout()
         stats_grid.setSpacing(8)
         self.stat_labels = {}
@@ -3276,6 +3827,28 @@ class MainWindow(QMainWindow):
             self.stat_labels[key] = num
         st.addLayout(stats_grid)
         r_layout.addWidget(stat_card)
+
+        from weight_visualization import WeightVisualizationWidget
+        weight_card = QFrame()
+        weight_card.setObjectName("card")
+        wc = QVBoxLayout(weight_card)
+        wc.setContentsMargins(18, 16, 18, 16)
+        wc.setSpacing(8)
+        wc_header = QHBoxLayout()
+        wc_label = QLabel("权重分布")
+        wc_label.setObjectName("subtitle")
+        wc_header.addWidget(wc_label)
+        wc_header.addStretch()
+        wc_detail_btn = QPushButton("详情")
+        wc_detail_btn.setStyleSheet("background: transparent; color: #0067c0; border: none; font-size: 10px; font-weight: 600;")
+        wc_detail_btn.setCursor(QCursor(Qt.PointingHandCursor))
+        wc_detail_btn.clicked.connect(self._show_weight_detail)
+        wc_header.addWidget(wc_detail_btn)
+        wc.addLayout(wc_header)
+        self.weight_viz = WeightVisualizationWidget()
+        self.weight_viz.setMaximumHeight(180)
+        wc.addWidget(self.weight_viz)
+        r_layout.addWidget(weight_card)
         shortcut_card = QFrame()
         shortcut_card.setObjectName("card")
         sc = QVBoxLayout(shortcut_card)
@@ -3337,8 +3910,12 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("R"), self, self._open_history)
         QShortcut(QKeySequence("T"), self, self._next_text)
         QShortcut(QKeySequence("Z"), self, self._undo_mark)
+        QShortcut(QKeySequence("Ctrl+Z"), self, self._undo_mark)
+        QShortcut(QKeySequence("Ctrl+Y"), self, self._redo_mark)
+        QShortcut(QKeySequence("Ctrl+Shift+Z"), self, self._redo_mark)
         QShortcut(QKeySequence("Tab"), self, self._skip)
         QShortcut(QKeySequence("N"), self, self._toggle_no_repeat)
+        QShortcut(QKeySequence("W"), self, self._toggle_weight)
         QShortcut(QKeySequence(","), self, self._open_settings)
         QShortcut(QKeySequence("P"), self, self._toggle_particles)
         QShortcut(QKeySequence("L"), self, self._open_ranking)
@@ -3346,6 +3923,12 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("F11"), self, self._toggle_fullscreen)
         QShortcut(QKeySequence("Ctrl+S"), self, self._save_data)
         QShortcut(QKeySequence("?"), self, self._show_shortcut_help)
+        QShortcut(QKeySequence("Left"), self, self._prev_text)
+        QShortcut(QKeySequence("Right"), self, self._next_text)
+        QShortcut(QKeySequence("Ctrl+="), self, self._zoom_in)
+        QShortcut(QKeySequence("Ctrl++"), self, self._zoom_in)
+        QShortcut(QKeySequence("Ctrl+-"), self, self._zoom_out)
+        QShortcut(QKeySequence("Ctrl+0"), self, self._reset_zoom)
 
     def _apply_settings(self):
         try:
@@ -3371,6 +3954,29 @@ class MainWindow(QMainWindow):
             text_align = self.config_mgr.get("text", "text_align")
             align = {"left": Qt.AlignLeft, "center": Qt.AlignCenter, "right": Qt.AlignRight}.get(text_align, Qt.AlignLeft)
             self.text_content.setAlignment(align | Qt.AlignTop)
+        except Exception:
+            pass
+        try:
+            anim_draw = bool(self.config_mgr.get("animation", "draw_enabled"))
+            if hasattr(self, 'draw_widget'):
+                self.draw_widget.set_animation_enabled(anim_draw)
+        except Exception:
+            pass
+        try:
+            anim_duration = int(self.config_mgr.get("animation", "duration_ms"))
+            if hasattr(self, 'draw_widget'):
+                self.draw_widget.set_animation_duration(anim_duration)
+        except Exception:
+            pass
+        try:
+            topmost = bool(self.config_mgr.get("ui", "window_topmost"))
+            on_top = bool(self.windowFlags() & Qt.WindowStaysOnTopHint)
+            if topmost != on_top and self.isVisible():
+                self.setWindowFlag(Qt.WindowStaysOnTopHint, topmost)
+                self.show()
+                self.activateWindow()
+                if hasattr(self, 'particles'):
+                    self.particles.lower()
         except Exception:
             pass
 
@@ -3418,6 +4024,12 @@ class MainWindow(QMainWindow):
             self._set_mode(self._draw_mode, save=False)
         except Exception:
             self._set_mode("auto", save=False)
+        QTimer.singleShot(100, self._update_weight_visualization)
+        try:
+            self.draw_btn.setEnabled(False)
+            self.draw_hint.setText("请点击绿色「新建轮次」按钮开始新一轮")
+        except Exception:
+            pass
 
     def _set_mode(self, mode, save=True):
         self._draw_mode = mode
@@ -3459,11 +4071,152 @@ class MainWindow(QMainWindow):
     def _select_text(self, item):
         self._show_text(self.text_list.row(item))
 
+    def _show_text_context_menu(self, pos):
+        item = self.text_list.itemAt(pos)
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu { background: white; border: 1px solid #ddd; border-radius: 6px; padding: 4px; }
+            QMenu::item { padding: 8px 20px; border-radius: 4px; }
+            QMenu::item:selected { background: #e5f1fb; }
+        """)
+        if item:
+            idx = self.text_list.row(item)
+            action_open = menu.addAction("打开此课文")
+            action_edit = menu.addAction("编辑课文内容")
+            menu.addSeparator()
+            action_up = menu.addAction("上移")
+            action_down = menu.addAction("下移")
+            menu.addSeparator()
+            action_delete = menu.addAction("删除此课文")
+            action = menu.exec_(self.text_list.mapToGlobal(pos))
+            if action == action_open:
+                self._show_text(idx)
+            elif action == action_edit:
+                self._edit_text(idx)
+            elif action == action_up:
+                self._move_text(idx, -1)
+            elif action == action_down:
+                self._move_text(idx, 1)
+            elif action == action_delete:
+                self._delete_text(idx)
+        else:
+            action_add = menu.addAction("添加新课文")
+            action_import = menu.addAction("从文件导入")
+            action = menu.exec_(self.text_list.mapToGlobal(pos))
+            if action == action_add:
+                self._add_new_text()
+            elif action == action_import:
+                self._import_texts()
+
     def _select_text_by_weight(self, item):
         idx = item.data(Qt.UserRole)
         if idx is not None:
             self.text_mode_specified.setChecked(True)
             self._show_text(idx)
+
+    def _edit_text(self, idx):
+        if idx < 0 or idx >= len(self._texts):
+            return
+        text = self._texts[idx]
+        title = text.get("title", f"课文{idx+1}") if isinstance(text, dict) else str(text)
+        content = text.get("content", "") if isinstance(text, dict) else ""
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"编辑课文：{title}")
+        dlg.setMinimumSize(500, 400)
+        layout = QVBoxLayout(dlg)
+        title_input = QLineEdit(title)
+        layout.addWidget(QLabel("课文标题："))
+        layout.addWidget(title_input)
+        content_input = QTextEdit(content)
+        layout.addWidget(QLabel("课文内容："))
+        layout.addWidget(content_input)
+        btn_layout = QHBoxLayout()
+        ok_btn = QPushButton("保存")
+        ok_btn.setObjectName("primary")
+        cancel_btn = QPushButton("取消")
+        btn_layout.addStretch()
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+        ok_btn.clicked.connect(dlg.accept)
+        cancel_btn.clicked.connect(dlg.reject)
+        if dlg.exec_():
+            new_title = title_input.text().strip()
+            new_content = content_input.toPlainText().strip()
+            if new_title and new_content:
+                self._texts[idx] = {"title": new_title, "content": new_content}
+                self._reload_text_list()
+                self._show_toast("课文已更新", 1500)
+
+    def _move_text(self, idx, direction):
+        if idx < 0 or idx >= len(self._texts):
+            return
+        new_idx = idx + direction
+        if new_idx < 0 or new_idx >= len(self._texts):
+            return
+        self._texts[idx], self._texts[new_idx] = self._texts[new_idx], self._texts[idx]
+        self._reload_text_list()
+        self.text_list.setCurrentRow(new_idx)
+
+    def _delete_text(self, idx):
+        if idx < 0 or idx >= len(self._texts):
+            return
+        reply = QMessageBox.question(self, "确认删除", "确定要删除这篇课文吗？",
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            del self._texts[idx]
+            self._reload_text_list()
+            self._show_toast("课文已删除", 1500)
+
+    def _add_new_text(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("添加新课文")
+        dlg.setMinimumSize(500, 400)
+        layout = QVBoxLayout(dlg)
+        title_input = QLineEdit()
+        title_input.setPlaceholderText("请输入课文标题")
+        layout.addWidget(QLabel("课文标题："))
+        layout.addWidget(title_input)
+        content_input = QTextEdit()
+        content_input.setPlaceholderText("请输入课文内容")
+        layout.addWidget(QLabel("课文内容："))
+        layout.addWidget(content_input)
+        btn_layout = QHBoxLayout()
+        ok_btn = QPushButton("添加")
+        ok_btn.setObjectName("primary")
+        cancel_btn = QPushButton("取消")
+        btn_layout.addStretch()
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+        ok_btn.clicked.connect(dlg.accept)
+        cancel_btn.clicked.connect(dlg.reject)
+        if dlg.exec_():
+            title = title_input.text().strip()
+            content = content_input.toPlainText().strip()
+            if title and content:
+                self._texts.append({"title": title, "content": content})
+                self._reload_text_list()
+                self._show_toast("课文已添加", 1500)
+
+    def _import_texts(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "导入课文文件", "", "文本文件 (*.txt);;所有文件 (*.*)")
+        if file_path:
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                if content.strip():
+                    self._texts.append({"title": os.path.basename(file_path), "content": content})
+                    self._reload_text_list()
+                    self._show_toast("课文已导入", 1500)
+            except Exception as e:
+                QMessageBox.warning(self, "导入失败", f"导入课文失败：{str(e)}")
+
+    def _reload_text_list(self):
+        self.text_list.clear()
+        for i, t in enumerate(self._texts):
+            title = t.get("title", f"课文{i+1}") if isinstance(t, dict) else str(t)
+            self.text_list.addItem(QListWidgetItem(f"{i+1}. {title}"))
 
     def _on_text_mode_changed(self):
         if self.text_mode_random.isChecked():
@@ -3500,7 +4253,73 @@ class MainWindow(QMainWindow):
         else:
             self._start_draw()
 
+    def _start_new_round(self):
+        if self._round_active:
+            reply = QMessageBox.question(self, "开始新轮次",
+                f"当前第 {self._round_id} 轮已进行中（已抽取 {len(self._round_records)} 人）。\n"
+                "开始新轮次将自动结束并保存当前轮次，确定继续吗？",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+            if reply != QMessageBox.Yes:
+                return
+            self._finish_round_to_storage()
+        if not self._students:
+            self.draw_hint.setText("无学生名单，请先添加")
+            return
+        self._round_id = self.data_mgr.next_round_id()
+        self._round_records = []
+        self._round_start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self._round_active = True
+        self.draw_engine.reset_round()
+        self.draw_widget.set_name("点击开始")
+        self.current_name.setText("—")
+        self.current_status.setText("待标记")
+        self.draw_hint.setText(f"第 {self._round_id} 轮已就绪，点击开始抽取")
+        for key in ["drawn", "mastered", "familiar", "unlearned"]:
+            self.stat_labels[key].setText("0")
+        self.stat_labels["remain"].setText(str(len(self._students)))
+        self.round_title_label.setText(f"第 {self._round_id} 轮")
+        self.round_title_label.setStyleSheet("font-size: 12px; font-weight: 700; color: #107c10;")
+        self.draw_btn.setEnabled(True)
+        self.draw_btn.setStyleSheet("")
+        self._show_toast(f"已开始第 {self._round_id} 轮", 2000)
+
+    def _finish_round_to_storage(self):
+        if not self._round_active:
+            return
+        records = []
+        for rec in self._round_records:
+            records.append({
+                "student": rec.get("student", ""),
+                "text": rec.get("text", ""),
+                "paragraph": rec.get("paragraph", ""),
+                "status": rec.get("status", "未标记"),
+                "time": rec.get("time", ""),
+            })
+        mastered = sum(1 for r in records if r["status"] == "已背过")
+        familiar = sum(1 for r in records if r["status"] == "未背熟")
+        unlearned = sum(1 for r in records if r["status"] == "未背过")
+        round_data = {
+            "round_id": self._round_id,
+            "start_time": self._round_start_time,
+            "end_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "records": records,
+            "summary": {"total": len(records), "mastered": mastered,
+                        "familiar": familiar, "unlearned": unlearned},
+        }
+        try:
+            self.data_mgr.save_round(round_data)
+        except Exception as e:
+            print(f"保存轮次失败: {e}")
+        self._round_active = False
+        self._round_id = None
+        self._round_records = []
+
     def _start_draw(self):
+        if not self._round_active:
+            self.draw_hint.setText("请先点击「新建轮次」开始一轮点名")
+            QMessageBox.information(self, "尚未开始轮次",
+                "请先点击左上角绿色「新建轮次」按钮，开始一轮点名后再抽取学生。")
+            return
         if not self._students:
             self.draw_hint.setText("无学生名单，请先添加")
             return
@@ -3567,6 +4386,16 @@ class MainWindow(QMainWindow):
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "status": "未标记"
         }
+        if self._round_active:
+            self._round_records.append({
+                "student": name,
+                "text": self.text_title.text() if self.text_title.text() != "—" else "",
+                "paragraph": "",
+                "status": "未标记",
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            })
+        QTimer.singleShot(100, self._update_weight_visualization)
+        self._speak_result(name)
         self._show_result_popup(name)
 
     def _show_result_popup(self, name):
@@ -3579,13 +4408,19 @@ class MainWindow(QMainWindow):
     def _mark(self, status):
         if not self._current_student:
             return
+        student_name = self._current_student
         self._last_marked_status = status
-        self._last_marked_student = self._current_student
+        self._last_marked_student = student_name
         if self._last_draw_result:
             self._last_draw_result["status"] = status
+        if self._round_active:
+            for rec in reversed(self._round_records):
+                if rec.get("student") == student_name and rec.get("status") == "未标记":
+                    rec["status"] = status
+                    break
         try:
-            self.data_mgr.set_student_status(self._current_student, status)
-            self.data_mgr.update_status_stats(self._current_student, status)
+            self.data_mgr.set_student_status(student_name, status)
+            self.data_mgr.update_status_stats(student_name, status)
         except Exception:
             pass
         self.current_status.setText(status)
@@ -3595,7 +4430,40 @@ class MainWindow(QMainWindow):
         if key:
             cur = int(self.stat_labels[key].text()) + 1
             self.stat_labels[key].setText(str(cur))
-        self._show_mark_toast(self._current_student, status)
+        self._show_mark_toast(student_name, status)
+
+        def undo_mark():
+            try:
+                self.data_mgr.revert_status_stats(student_name, status)
+            except Exception:
+                pass
+            k = {"已背过": "mastered", "未背熟": "familiar", "未背过": "unlearned"}.get(status)
+            if k:
+                c = max(0, int(self.stat_labels[k].text()) - 1)
+                self.stat_labels[k].setText(str(c))
+            if self._current_student == student_name:
+                self.current_status.setText("待标记")
+                self.current_status.setStyleSheet("color: #666666; font-size: 12px;")
+            self._show_undo_toast(student_name, status)
+
+        def redo_mark():
+            try:
+                self.data_mgr.set_student_status(student_name, status)
+                self.data_mgr.update_status_stats(student_name, status)
+            except Exception:
+                pass
+            k = {"已背过": "mastered", "未背熟": "familiar", "未背过": "unlearned"}.get(status)
+            if k:
+                c = int(self.stat_labels[k].text()) + 1
+                self.stat_labels[k].setText(str(c))
+            if self._current_student == student_name:
+                self.current_status.setText(status)
+                self.current_status.setStyleSheet(f"color: {colors.get(status, '#666666')}; font-size: 12px; font-weight: 700;")
+            self._show_mark_toast(student_name, status)
+
+        from operation_history import MarkOperation
+        operation = MarkOperation(student_name, status, undo_mark, redo_mark)
+        self.history_mgr.add_operation(operation)
 
     def _show_mark_toast(self, name, status):
         toast = MarkToast(name, status, self)
@@ -3614,24 +4482,22 @@ class MainWindow(QMainWindow):
         toast.show()
 
     def _undo_mark(self):
-        if not hasattr(self, '_last_marked_student') or not self._last_marked_student:
+        if not hasattr(self, 'history_mgr') or not self.history_mgr.can_undo():
+            self._show_toast("没有可撤销的操作", 1500)
             return
-        name = self._last_marked_student
-        status = self._last_marked_status
-        try:
-            self.data_mgr.revert_status_stats(name, status)
-        except Exception:
-            pass
-        key = {"已背过": "mastered", "未背熟": "familiar", "未背过": "unlearned"}.get(status)
-        if key:
-            cur = max(0, int(self.stat_labels[key].text()) - 1)
-            self.stat_labels[key].setText(str(cur))
-        if self._current_student == name:
-            self.current_status.setText("待标记")
-            self.current_status.setStyleSheet("color: #666666; font-size: 12px;")
-        self._last_marked_student = None
-        self._last_marked_status = None
-        self._show_undo_toast(name, status)
+        operation = self.history_mgr.undo()
+        if operation:
+            self._last_marked_student = None
+            self._last_marked_status = None
+            self._show_toast(f"已撤销：{operation.description}", 2000)
+
+    def _redo_mark(self):
+        if not hasattr(self, 'history_mgr') or not self.history_mgr.can_redo():
+            self._show_toast("没有可重做的操作", 1500)
+            return
+        operation = self.history_mgr.redo()
+        if operation:
+            self._show_toast(f"已重做：{operation.description}", 2000)
 
     def _skip(self):
         if not self._current_student:
@@ -3650,16 +4516,74 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+    def _toggle_weight(self):
+        try:
+            current = self.config_mgr.get("draw", "weighted", False)
+            new_value = not current
+            self.config_mgr.set(new_value, "draw", "weighted")
+            self.config_mgr.save_config()
+            if hasattr(self, 'weight_btn'):
+                self.weight_btn.setText(f"权重:{'开' if new_value else '关'}")
+            self._show_toast(f"动态权重已{'开启' if new_value else '关闭'}", 1500)
+            self._update_weight_visualization()
+        except Exception as e:
+            print(f"切换权重模式失败: {e}")
+            self._show_toast("动态权重切换失败", 1500)
+
+    def _show_weight_detail(self):
+        try:
+            from weight_visualization import WeightDistributionDialog
+            weights = self._calculate_all_weights()
+            dlg = WeightDistributionDialog(self._students, weights, self)
+            dlg.exec_()
+        except Exception as e:
+            print(f"显示权重详情失败: {e}")
+
+    def _calculate_all_weights(self):
+        weights = {}
+        try:
+            for student in self._students:
+                try:
+                    weight = self.draw_engine._calculate_weight(student)
+                    weights[student] = weight
+                except Exception:
+                    weights[student] = 1.0
+        except Exception:
+            pass
+        return weights
+
+    def _update_weight_visualization(self):
+        try:
+            if hasattr(self, 'weight_viz') and self._students:
+                weights = self._calculate_all_weights()
+                self.weight_viz.update_weights(self._students, weights)
+        except Exception as e:
+            print(f"更新权重可视化失败: {e}")
+
     def _reset_round(self):
+        if self._round_active:
+            n = len(self._round_records)
+            reply = QMessageBox.question(self, "结束本轮",
+                f"结束并保存第 {self._round_id} 轮（共抽取 {n} 人）？\n\n"
+                "保存后可在「数据统计」中查看与恢复本轮记录。",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+            if reply != QMessageBox.Yes:
+                return
+            saved_id = self._round_id
+            self._finish_round_to_storage()
+            self._show_toast(f"第 {saved_id} 轮已保存，共 {n} 条记录", 3000)
         self.draw_engine.reset_round()
         self._current_student = None
-        self.draw_widget.set_name("点击开始")
+        self.draw_widget.set_name("点击新建轮次")
         self.current_name.setText("—")
-        self.current_status.setText("待标记")
-        self.draw_hint.setText("点击下方按钮或按空格键开始抽取")
+        self.current_status.setText("待开始")
+        self.draw_hint.setText("请点击绿色「新建轮次」按钮开始新一轮")
         for key in ["drawn", "mastered", "familiar", "unlearned"]:
             self.stat_labels[key].setText("0")
         self.stat_labels["remain"].setText(str(len(self._students)))
+        self.round_title_label.setText("未开始")
+        self.round_title_label.setStyleSheet("font-size: 12px; font-weight: 700; color: #c42b1c;")
+        self.draw_btn.setEnabled(False)
 
     def _open_settings(self):
         dlg = SettingsDialog(self.config_mgr, self.theme_mgr, self.echo_hole, self.plugin_mgr, self)
@@ -3668,14 +4592,94 @@ class MainWindow(QMainWindow):
             self._load_data()
             class_name = self._get_class_name()
             self.setWindowTitle(f"{class_name}班点名程序")
+            try:
+                need_restart = self.config_mgr.check_restart_required()
+            except Exception:
+                need_restart = False
+            if need_restart:
+                box = QMessageBox(self)
+                box.setWindowTitle("需要重启")
+                box.setIcon(QMessageBox.Warning)
+                box.setText("<h3>部分设置需要重启后生效</h3>")
+                box.setInformativeText("窗口圆角、阴影等外观修改已保存，点击「立即重启」关闭并重新打开程序以应用。")
+                restart_btn = box.addButton("立即重启", QMessageBox.AcceptRole)
+                later_btn = box.addButton("稍后", QMessageBox.RejectRole)
+                box.setDefaultButton(restart_btn)
+                box.exec_()
+                if box.clickedButton() == restart_btn:
+                    try:
+                        if self._round_active and self._round_records:
+                            self._finish_round_to_storage()
+                    except Exception:
+                        pass
+                    import sys as _sys
+                    QApplication.quit()
+                    os.execv(_sys.executable, [_sys.executable] + _sys.argv)
 
     def _open_stats(self):
         dlg = StatsDialog(self.data_mgr, self)
         dlg.exec_()
 
+    def closeEvent(self, event):
+        try:
+            if self._round_active and self._round_records:
+                self._finish_round_to_storage()
+        except Exception:
+            pass
+        super().closeEvent(event)
+
+    def _get_tts_engine(self):
+        try:
+            if getattr(self, "_tts", None) is None:
+                import pyttsx3
+                self._tts = pyttsx3.init()
+            return self._tts
+        except Exception:
+            self._tts = None
+            return None
+
+    def _speak_result(self, name):
+        try:
+            if not self.config_mgr.get("tts", "enabled"):
+                return
+        except Exception:
+            return
+        try:
+            engine = self._get_tts_engine()
+            if engine is None:
+                return
+            rate = self.config_mgr.get("tts", "rate") or 150
+            engine.setProperty("rate", int(rate))
+            text_title = ""
+            try:
+                if self.config_mgr.get("tts", "speak_text") and self.text_title.text() not in ("—", ""):
+                    text_title = f"，背诵 {self.text_title.text()}"
+            except Exception:
+                pass
+            engine.say(f"{name}同学{text_title}")
+            engine.runAndWait()
+        except Exception:
+            pass
+
     def _open_ranking(self):
         dlg = RankingDialog(self.data_mgr, self)
         dlg.exec_()
+
+
+    def _show_restart_required(self, message="部分设置需要重启后生效"):
+        self.restart_btn.show()
+        self.restart_btn.setToolTip(message)
+        self._show_toast(message, 3000)
+
+    def _restart_app(self):
+        reply = QMessageBox.question(self, "重启确认",
+            "确定要立即重启程序吗？\n\n未保存的数据可能会丢失。",
+            QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            import sys
+            QApplication.quit()
+            import subprocess
+            subprocess.Popen([sys.executable] + sys.argv)
 
     def _show_help(self):
         dlg = QDialog(self)
@@ -3805,8 +4809,18 @@ class MainWindow(QMainWindow):
     def _save_data(self):
         try:
             self.data_mgr.save_stats()
+            self.config_mgr.save_config()
+            self._last_autosave_time = datetime.now().strftime("%H:%M:%S")
         except Exception:
             pass
+
+    def _autosave(self):
+        try:
+            self.data_mgr.save_stats()
+            self.config_mgr.save_config()
+            self._last_autosave_time = datetime.now().strftime("%H:%M:%S")
+        except Exception as e:
+            print(f"自动保存失败: {e}")
 
     def _show_shortcut_help(self):
         QMessageBox.information(self, "快捷键速查",
@@ -3840,6 +4854,49 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'particles'):
             self.particles.resize(self.size())
 
+    def wheelEvent(self, event):
+        if event.modifiers() & Qt.ControlModifier:
+            delta = event.angleDelta().y()
+            if delta > 0:
+                self._zoom_in()
+            else:
+                self._zoom_out()
+            event.accept()
+        else:
+            super().wheelEvent(event)
+
+    def _zoom_in(self):
+        new_scale = min(self._max_scale, self._ui_scale + self._scale_step)
+        if new_scale != self._ui_scale:
+            self._ui_scale = new_scale
+            self._apply_zoom()
+            self._show_toast(f"界面缩放: {int(self._ui_scale * 100)}%", 1000)
+
+    def _zoom_out(self):
+        new_scale = max(self._min_scale, self._ui_scale - self._scale_step)
+        if new_scale != self._ui_scale:
+            self._ui_scale = new_scale
+            self._apply_zoom()
+            self._show_toast(f"界面缩放: {int(self._ui_scale * 100)}%", 1000)
+
+    def _reset_zoom(self):
+        if self._ui_scale != 1.0:
+            self._ui_scale = 1.0
+            self._apply_zoom()
+            self._show_toast("界面缩放已重置为 100%", 1000)
+
+    def _apply_zoom(self):
+        try:
+            base_font_size = 10
+            scaled_size = max(8, int(base_font_size * self._ui_scale))
+            app = QApplication.instance()
+            if app:
+                app.setFont(QFont("Microsoft YaHei", scaled_size))
+            self.setStyleSheet(self.styleSheet())
+            self.update()
+        except Exception as e:
+            print(f"应用缩放失败: {e}")
+
     def changeEvent(self, event):
         if event.type() == event.WindowStateChange:
             if self.isMinimized():
@@ -3871,7 +4928,7 @@ def check_wizard():
     finished = False
     try:
         cfg = configparser.ConfigParser()
-        cfg.read(ini_path, encoding="utf-8")
+        cfg.read(ini_path, encoding="utf-8-sig")
         finished = cfg.getboolean("status", "finished", fallback=False)
     except Exception:
         finished = False
@@ -3903,17 +4960,211 @@ def handle_url_protocol(argv):
     return action
 
 
-def main():
-    if not check_wizard():
-        wizard_path = os.path.join(BASE_DIR, "wizard_launcher.py")
-        wizard_exe = os.path.join(BASE_DIR, "A13配置向导.exe")
+# ==================== 全局异常处理 ====================
+_crash_report_dir = os.path.join(BASE_DIR, "crash_reports")
+_last_crash_file = os.path.join(BASE_DIR, "last_crash.json")
+
+
+def _ensure_crash_dir():
+    try:
+        os.makedirs(_crash_report_dir, exist_ok=True)
+    except Exception:
+        pass
+
+
+def _generate_crash_report(exc_type, exc_value, exc_tb):
+    _ensure_crash_dir()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    report_file = os.path.join(_crash_report_dir, f"crash_{timestamp}.txt")
+
+    try:
+        tb_str = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+    except Exception:
+        tb_str = str(exc_value)
+
+    report_content = f"""A13课堂点名系统 - 崩溃报告
+========================================
+崩溃时间: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+程序版本: 6.8.0
+Python版本: {sys.version}
+操作系统: {sys.platform}
+工作目录: {BASE_DIR}
+
+异常类型: {exc_type.__name__}
+异常信息: {str(exc_value)}
+
+完整堆栈跟踪:
+{tb_str}
+
+系统信息:
+- 可执行文件: {sys.executable}
+- 命令行参数: {sys.argv}
+- 已加载模块数: {len(sys.modules)}
+
+========================================
+此报告自动生成，可用于技术支持排查问题
+"""
+
+    try:
+        with open(report_file, "w", encoding="utf-8") as f:
+            f.write(report_content)
+    except Exception:
+        pass
+
+    try:
+        import json
+        crash_info = {
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "type": exc_type.__name__,
+            "message": str(exc_value),
+            "report_file": report_file,
+        }
+        with open(_last_crash_file, "w", encoding="utf-8") as f:
+            json.dump(crash_info, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+    return report_file
+
+
+def _global_exception_hook(exc_type, exc_value, exc_tb):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_tb)
+        return
+
+    report_file = _generate_crash_report(exc_type, exc_value, exc_tb)
+
+    print(f"\n{'='*60}")
+    print(f"程序发生未捕获异常！")
+    print(f"异常类型: {exc_type.__name__}")
+    print(f"异常信息: {str(exc_value)}")
+    print(f"崩溃报告已保存: {report_file}")
+    print(f"{'='*60}\n")
+    traceback.print_exception(exc_type, exc_value, exc_tb)
+
+    try:
+        from PyQt5.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app:
+            try:
+                from error_dialog import ModernErrorDialog
+                details = traceback.format_exception(exc_type, exc_value, exc_tb)
+                details_str = "".join(details)
+                error_msg = (
+                    f"程序发生未捕获异常，即将退出。\n\n"
+                    f"异常类型: {exc_type.__name__}\n"
+                    f"异常信息: {str(exc_value)[:200]}\n\n"
+                    f"崩溃报告已保存到:\n{report_file}\n\n"
+                    f"建议:\n"
+                    f"1. 查看崩溃报告了解详细信息\n"
+                    f"2. 重启程序，系统将尝试恢复上次状态\n"
+                    f"3. 如问题持续存在，请联系技术支持"
+                )
+                dialog = ModernErrorDialog(
+                    title="程序异常",
+                    message=error_msg,
+                    details=details_str,
+                    error_type="error",
+                    parent=None
+                )
+                dialog.exec_()
+            except Exception as dialog_error:
+                print(f"显示错误对话框失败: {dialog_error}")
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.critical(None, "程序异常", f"程序发生异常：{str(exc_value)}")
+    except Exception:
+        pass
+
+
+def _check_last_crash():
+    try:
+        if not os.path.exists(_last_crash_file):
+            return None
+        import json
+        with open(_last_crash_file, "r", encoding="utf-8") as f:
+            crash_info = json.load(f)
+        return crash_info
+    except Exception:
+        return None
+
+
+def _show_crash_recovery_dialog(crash_info):
+    try:
+        from PyQt5.QtWidgets import QMessageBox, QCheckBox
+        from PyQt5.QtCore import Qt
+
+        msg_box = QMessageBox()
+        msg_box.setWindowTitle("检测到上次异常退出")
+        msg_box.setIcon(QMessageBox.Warning)
+        msg_box.setText(
+            f"检测到程序上次运行时发生异常退出。\n\n"
+            f"异常时间: {crash_info.get('time', '未知')}\n"
+            f"异常类型: {crash_info.get('type', '未知')}\n"
+            f"异常信息: {crash_info.get('message', '未知')[:100]}\n\n"
+            f"是否需要查看崩溃报告？"
+        )
+        msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg_box.setDefaultButton(QMessageBox.No)
+
+        result = msg_box.exec_()
+        if result == QMessageBox.Yes:
+            report_file = crash_info.get('report_file', '')
+            if report_file and os.path.exists(report_file):
+                try:
+                    if sys.platform == 'win32':
+                        os.startfile(report_file)
+                    elif sys.platform == 'darwin':
+                        subprocess.Popen(['open', report_file])
+                    else:
+                        subprocess.Popen(['xdg-open', report_file])
+                except Exception:
+                    pass
+
         try:
-            if os.path.exists(wizard_exe):
-                subprocess.Popen([wizard_exe], cwd=BASE_DIR)
-            elif os.path.exists(wizard_path):
-                subprocess.Popen([sys.executable, wizard_path], cwd=BASE_DIR)
-        except Exception as e:
-            print(f"启动向导失败: {e}")
+            os.remove(_last_crash_file)
+        except Exception:
+            pass
+
+        return True
+    except Exception:
+        return False
+
+
+def main():
+    sys.excepthook = _global_exception_hook
+
+    crash_info = _check_last_crash()
+
+    if not check_wizard():
+        wizard_found = None
+        for wname in ("向导启动器.exe", "A13配置向导.exe"):
+            wp = os.path.join(BASE_DIR, wname)
+            if os.path.exists(wp):
+                wizard_found = wp
+                break
+        if not wizard_found:
+            for wname in ("wizard_launcher.py",):
+                wp = os.path.join(BASE_DIR, wname)
+                if os.path.exists(wp):
+                    wizard_found = wp
+                    break
+        if wizard_found:
+            try:
+                if wizard_found.lower().endswith(".py"):
+                    subprocess.Popen([sys.executable, wizard_found], cwd=BASE_DIR)
+                else:
+                    subprocess.Popen([wizard_found], cwd=BASE_DIR)
+            except Exception as e:
+                print(f"启动向导失败: {e}")
+        else:
+            try:
+                from PyQt5.QtWidgets import QMessageBox as _QMB, QApplication as _QApp
+                _qa = _QApp(sys.argv)
+                _QMB.warning(None, "配置向导未找到",
+                    "未找到配置向导程序（向导启动器.exe）。\n\n"
+                    "请确认它和本程序放在同一个文件夹中，或手动编辑名单和课文文件后重新启动。")
+            except Exception:
+                pass
         sys.exit(0)
 
     app = QApplication(sys.argv)
@@ -3953,21 +5204,34 @@ def main():
 
     window = MainWindow(show_guide=show_guide)
 
-    def on_show():
-        splash.close()
-        window.show()
-        if url_action == "quick":
-            QTimer.singleShot(300, window._open_quick)
-        elif url_action == "draw":
-            QTimer.singleShot(300, window._toggle_draw)
-        elif url_action == "settings":
-            QTimer.singleShot(300, window._open_settings)
-        elif url_action == "echo":
-            QTimer.singleShot(300, window._open_echo)
+    if crash_info:
+        QTimer.singleShot(500, lambda: _show_crash_recovery_dialog(crash_info))
 
-    QTimer.singleShot(2000, on_show)
+    app.setQuitOnLastWindowClosed(False)
+    window.show()
+    splash.finish(window)
+    app.setQuitOnLastWindowClosed(True)
+
+    if url_action == "quick":
+        QTimer.singleShot(300, window._open_quick)
+    elif url_action == "draw":
+        QTimer.singleShot(300, window._toggle_draw)
+    elif url_action == "settings":
+        QTimer.singleShot(300, window._open_settings)
+    elif url_action == "echo":
+        QTimer.singleShot(300, window._open_echo)
+
     sys.exit(app.exec_())
 
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
+
+

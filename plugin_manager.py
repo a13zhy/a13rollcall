@@ -1,4 +1,4 @@
-import os
+﻿import os
 import json
 import sys
 import traceback
@@ -251,6 +251,52 @@ class PluginContext:
         """获取插件依赖库目录"""
         return self.libs_dir
 
+    def get_icons_dir(self):
+        """获取插件图标资源目录"""
+        return os.path.join(self.data_dir, "icons")
+
+    def has_icon(self, icon_name):
+        """检查插件是否包含某个图标"""
+        icons_dir = self.get_icons_dir()
+        for ext in ['.ico', '.png', '.svg']:
+            icon_path = os.path.join(icons_dir, icon_name + ext)
+            if os.path.exists(icon_path):
+                return True
+        return os.path.exists(os.path.join(icons_dir, icon_name))
+
+    def get_icon_path(self, icon_name):
+        """获取插件图标的完整路径"""
+        icons_dir = self.get_icons_dir()
+        for ext in ['.ico', '.png', '.svg']:
+            icon_path = os.path.join(icons_dir, icon_name + ext)
+            if os.path.exists(icon_path):
+                return icon_path
+        direct_path = os.path.join(icons_dir, icon_name)
+        if os.path.exists(direct_path):
+            return direct_path
+        return None
+
+    def list_icons(self):
+        """列出插件自带的所有图标"""
+        icons_dir = self.get_icons_dir()
+        if not os.path.exists(icons_dir):
+            return []
+        try:
+            return [f for f in os.listdir(icons_dir) if f.endswith(('.ico', '.png', '.svg'))]
+        except Exception:
+            return []
+
+    def load_icon(self, icon_name):
+        """加载插件图标为 QIcon"""
+        try:
+            from PyQt5.QtGui import QIcon
+            icon_path = self.get_icon_path(icon_name)
+            if icon_path:
+                return QIcon(icon_path)
+        except Exception as e:
+            self.logger.error(f"加载图标失败: {e}")
+        return None
+
     def has_lib(self, lib_name):
         """检查插件是否自带某个依赖库"""
         lib_path = os.path.join(self.libs_dir, lib_name)
@@ -274,8 +320,17 @@ class PluginContext:
 
     def show_message(self, title, message):
         from PyQt5.QtWidgets import QMessageBox
+        from PyQt5.QtCore import Qt
         self.logger.info(f"显示消息框：{title}")
-        QMessageBox.information(None, title, message)
+        try:
+            box = QMessageBox(self._app.activeWindow() if getattr(self, "_app", None) else None)
+            box.setWindowTitle(title)
+            box.setText(message)
+            box.setIcon(QMessageBox.Information)
+            box.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+            box.show()
+        except Exception:
+            QMessageBox.information(None, title, message)
 
     def show_custom_dialog(self, title, content, buttons=None):
         from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
@@ -367,6 +422,54 @@ class PluginContext:
             return self.app._current_student
         return None
 
+    def get_draw_state(self):
+        is_drawing = False
+        drawn_count = 0
+        remaining = 0
+        if hasattr(self.app, '_is_drawing'):
+            is_drawing = self.app._is_drawing
+        if hasattr(self.app, '_drawn_students'):
+            drawn_count = len(self.app._drawn_students)
+        students = self.get_students()
+        remaining = max(0, len(students) - drawn_count)
+        return {
+            "is_drawing": is_drawing,
+            "drawn_count": drawn_count,
+            "remaining": remaining,
+            "total": len(students),
+            "current": self.get_current_student(),
+            "last_result": self.get_last_draw_result(),
+        }
+
+    def get_all_stats(self):
+        stats = {
+            "已背过": 0,
+            "未背熟": 0,
+            "未背过": 0,
+            "未标记": 0,
+        }
+        try:
+            if hasattr(self.app, 'data_mgr') and self.app.data_mgr:
+                if hasattr(self.app.data_mgr, 'get_status_stats'):
+                    data_stats = self.app.data_mgr.get_status_stats()
+                    if data_stats:
+                        stats.update(data_stats)
+                elif hasattr(self.app.data_mgr, 'status_stats'):
+                    stats.update(self.app.data_mgr.status_stats)
+        except Exception as e:
+            self.logger.error(f"获取统计失败: {e}")
+        return stats
+
+    def get_drawn_students(self):
+        if hasattr(self.app, '_drawn_students'):
+            return list(self.app._drawn_students)
+        return []
+
+    def get_remaining_students(self):
+        all_students = self.get_students()
+        drawn = self.get_drawn_students()
+        return [s for s in all_students if s not in drawn]
+
     def get_last_draw_result(self):
         if hasattr(self.app, '_last_draw_result') and self.app._last_draw_result:
             return self.app._last_draw_result
@@ -422,6 +525,24 @@ class PluginContext:
 
     def log(self, message):
         self.logger.info(message)
+
+    def log_info(self, message):
+        self.logger.info(message)
+
+    def log_error(self, message):
+        self.logger.error(message)
+
+    def log_warning(self, message):
+        self.logger.warning(message)
+
+    def log_debug(self, message):
+        self.logger.debug(message)
+
+    def log_success(self, message):
+        self.logger.info(f"✅ {message}")
+
+    def log_failure(self, message):
+        self.logger.error(f"❌ {message}")
 
     def register_event_handler(self, event_name, handler):
         self._event_handlers[event_name].append(handler)
@@ -556,13 +677,677 @@ class PluginContext:
             return None
 
     def _get_exec_globals(self):
-        return {
+        import datetime as _dt_module
+        from datetime import datetime, timedelta, date
+        import os
+        import sys
+        import json
+        import time
+        import random
+        import math
+        import re
+        import traceback
+        import hashlib
+        import csv
+        import collections
+        import urllib.request
+        from pathlib import Path
+        from typing import List, Dict, Optional, Tuple, Any, Callable
+        try:
+            from PyQt5.QtCore import (Qt, QTimer, QUrl, QThread, pyqtSignal,
+                                      QObject, QSize, QPoint, QRect)
+            from PyQt5.QtWidgets import (QWidget, QDialog, QMessageBox, QInputDialog,
+                                         QLineEdit, QTextEdit, QLabel, QPushButton,
+                                         QVBoxLayout, QHBoxLayout, QFormLayout,
+                                         QListWidget, QListWidgetItem, QComboBox,
+                                         QCheckBox, QSpinBox, QDoubleSpinBox,
+                                         QTableWidget, QTableWidgetItem, QHeaderView,
+                                         QFileDialog, QProgressBar, QGroupBox,
+                                         QTabWidget, QScrollArea, QFrame, QApplication)
+            from PyQt5.QtGui import QIcon, QPixmap, QColor, QFont, QPalette
+            _qt_ok = True
+        except Exception:
+            _qt_ok = False
+
+        def _plugin_print(*args, **kwargs):
+            message = " ".join(str(a) for a in args)
+            self.logger.info(message)
+        g = {
             'context': self,
             'plugin': self.plugin,
             'app': self.app,
-            'print': self.logger.info,
+            'print': _plugin_print,
             '__name__': 'plugin_exec',
+            'datetime': datetime,
+            'timedelta': timedelta,
+            'date': date,
+            'datetime_module': _dt_module,
+            'os': os,
+            'sys': sys,
+            'json': json,
+            'time': time,
+            'random': random,
+            'math': math,
+            're': re,
+            'traceback': traceback,
+            'hashlib': hashlib,
+            'csv': csv,
+            'urllib_request': urllib.request,
+            'collections': collections,
+            'Path': Path,
+            'List': List,
+            'Dict': Dict,
+            'Optional': Optional,
+            'Tuple': Tuple,
+            'Any': Any,
+            'Callable': Callable,
         }
+        if _qt_ok:
+            g.update({
+                'Qt': Qt, 'QTimer': QTimer, 'QUrl': QUrl, 'QThread': QThread,
+                'QObject': QObject, 'pyqtSignal': pyqtSignal, 'QSize': QSize,
+                'QPoint': QPoint, 'QRect': QRect,
+                'QWidget': QWidget, 'QDialog': QDialog, 'QMessageBox': QMessageBox,
+                'QInputDialog': QInputDialog, 'QLineEdit': QLineEdit,
+                'QTextEdit': QTextEdit, 'QLabel': QLabel, 'QPushButton': QPushButton,
+                'QVBoxLayout': QVBoxLayout, 'QHBoxLayout': QHBoxLayout,
+                'QFormLayout': QFormLayout, 'QListWidget': QListWidget,
+                'QListWidgetItem': QListWidgetItem, 'QComboBox': QComboBox,
+                'QCheckBox': QCheckBox, 'QSpinBox': QSpinBox,
+                'QDoubleSpinBox': QDoubleSpinBox, 'QTableWidget': QTableWidget,
+                'QTableWidgetItem': QTableWidgetItem, 'QHeaderView': QHeaderView,
+                'QFileDialog': QFileDialog, 'QProgressBar': QProgressBar,
+                'QGroupBox': QGroupBox, 'QTabWidget': QTabWidget,
+                'QScrollArea': QScrollArea, 'QFrame': QFrame,
+                'QApplication': QApplication,
+                'QIcon': QIcon, 'QPixmap': QPixmap, 'QColor': QColor,
+                'QFont': QFont, 'QPalette': QPalette,
+            })
+        return g
+
+    # ==================== 插件间通信（新增） ====================
+
+    def call_plugin(self, plugin_name, function_name, *args, **kwargs):
+        if not self.plugin_mgr:
+            return None, "插件管理器不可用"
+        target_plugin = self.plugin_mgr.get_plugin(plugin_name)
+        if not target_plugin:
+            return None, f"插件 {plugin_name} 不存在"
+        if not target_plugin.get("enabled", True):
+            return None, f"插件 {plugin_name} 已禁用"
+        try:
+            target_context = self.plugin_mgr.get_context(plugin_name, self.app)
+            if not target_context:
+                return None, f"无法获取插件 {plugin_name} 的上下文"
+            code = target_plugin.get("code", "")
+            exec_globals = target_context._get_exec_globals()
+            exec(code, exec_globals)
+            if function_name not in exec_globals:
+                return None, f"插件 {plugin_name} 中没有函数 {function_name}"
+            func = exec_globals[function_name]
+            if not callable(func):
+                return None, f"{function_name} 不是可调用对象"
+            result = func(target_context, *args, **kwargs)
+            self.logger.info(f"调用插件 {plugin_name}.{function_name} 成功")
+            return result, None
+        except Exception as e:
+            error_msg = f"调用插件 {plugin_name}.{function_name} 失败：{str(e)}"
+            self.logger.error(error_msg)
+            return None, error_msg
+
+    def get_plugin_list(self):
+        if not self.plugin_mgr:
+            return []
+        plugins = self.plugin_mgr.get_all_plugins()
+        return [{
+            "name": p["meta"].get("name", ""),
+            "version": p["meta"].get("version", "0.0.0"),
+            "author": p["meta"].get("author", ""),
+            "description": p["meta"].get("description", ""),
+            "enabled": p.get("enabled", True),
+            "has_settings": p["meta"].get("has_settings_page", False),
+        } for p in plugins]
+
+    def is_plugin_enabled(self, plugin_name):
+        if not self.plugin_mgr:
+            return False
+        plugin = self.plugin_mgr.get_plugin(plugin_name)
+        return plugin.get("enabled", True) if plugin else False
+
+    def share_data(self, key, value, global_scope=False):
+        if global_scope and self.plugin_mgr:
+            if not hasattr(self.plugin_mgr, '_shared_data'):
+                self.plugin_mgr._shared_data = {}
+            self.plugin_mgr._shared_data[key] = value
+            self.logger.info(f"共享数据（全局）: {key}")
+        else:
+            self.set(f"shared_{key}", value)
+            self.logger.info(f"共享数据（插件内）: {key}")
+
+    def get_shared_data(self, key, default=None, global_scope=False):
+        if global_scope and self.plugin_mgr:
+            if hasattr(self.plugin_mgr, '_shared_data'):
+                return self.plugin_mgr._shared_data.get(key, default)
+            return default
+        return self.get(f"shared_{key}", default)
+
+    def broadcast_event(self, event_name, data=None):
+        if not self.plugin_mgr:
+            return 0
+        if not hasattr(self.plugin_mgr, '_event_bus'):
+            self.plugin_mgr._event_bus = {}
+        handlers = self.plugin_mgr._event_bus.get(event_name, [])
+        count = 0
+        for handler in handlers:
+            try:
+                handler(data)
+                count += 1
+            except Exception as e:
+                self.logger.error(f"事件处理器执行失败：{str(e)}")
+        self.logger.info(f"广播事件 {event_name}，触发 {count} 个处理器")
+        return count
+
+    def listen_event(self, event_name, handler):
+        if not self.plugin_mgr:
+            return False
+        if not hasattr(self.plugin_mgr, '_event_bus'):
+            self.plugin_mgr._event_bus = {}
+        if event_name not in self.plugin_mgr._event_bus:
+            self.plugin_mgr._event_bus[event_name] = []
+        self.plugin_mgr._event_bus[event_name].append(handler)
+        self.logger.info(f"监听事件 {event_name}")
+        return True
+
+    def unlisten_event(self, event_name, handler=None):
+        if not self.plugin_mgr or not hasattr(self.plugin_mgr, '_event_bus'):
+            return False
+        if event_name not in self.plugin_mgr._event_bus:
+            return False
+        if handler:
+            try:
+                self.plugin_mgr._event_bus[event_name].remove(handler)
+                return True
+            except ValueError:
+                return False
+        else:
+            del self.plugin_mgr._event_bus[event_name]
+            return True
+
+    # ==================== 核心功能扩展（新增） ====================
+
+    def register_draw_mode(self, mode_name, mode_info):
+        if not hasattr(self, '_custom_draw_modes'):
+            self._custom_draw_modes = {}
+        self._custom_draw_modes[mode_name] = mode_info
+        self.logger.info(f"注册抽取模式: {mode_name}")
+        return True
+
+    def get_draw_modes(self):
+        return getattr(self, '_custom_draw_modes', {})
+
+    def register_mark_status(self, status_name, status_info):
+        if not hasattr(self, '_custom_mark_statuses'):
+            self._custom_mark_statuses = {}
+        self._custom_mark_statuses[status_name] = status_info
+        self.logger.info(f"注册标记状态: {status_name}")
+        return True
+
+    def get_mark_statuses(self):
+        return getattr(self, '_custom_mark_statuses', {})
+
+    def register_shortcut(self, key_sequence, callback, description=""):
+        try:
+            from PyQt5.QtWidgets import QShortcut
+            from PyQt5.QtGui import QKeySequence
+            shortcut = QShortcut(QKeySequence(key_sequence), self.app)
+            shortcut.activated.connect(callback)
+            if not hasattr(self, '_custom_shortcuts'):
+                self._custom_shortcuts = []
+            self._custom_shortcuts.append((shortcut, key_sequence, description))
+            self.logger.info(f"注册快捷键: {key_sequence} - {description}")
+            return True
+        except Exception as e:
+            self.logger.error(f"注册快捷键失败: {str(e)}")
+            return False
+
+    def get_shortcuts(self):
+        return getattr(self, '_custom_shortcuts', [])
+
+    def set_draw_algorithm(self, algorithm_func):
+        self._custom_draw_algorithm = algorithm_func
+        self.logger.info("设置自定义抽取算法")
+        return True
+
+    def get_draw_algorithm(self):
+        return getattr(self, '_custom_draw_algorithm', None)
+
+    def add_student(self, student_name):
+        if hasattr(self.app, '_students'):
+            if student_name not in self.app._students:
+                self.app._students.append(student_name)
+                self.logger.info(f"添加学生: {student_name}")
+                return True
+        return False
+
+    def remove_student(self, student_name):
+        if hasattr(self.app, '_students'):
+            if student_name in self.app._students:
+                self.app._students.remove(student_name)
+                self.logger.info(f"移除学生: {student_name}")
+                return True
+        return False
+
+    def add_text(self, title, content):
+        if hasattr(self.app, '_texts'):
+            self.app._texts.append({"title": title, "content": content})
+            self.logger.info(f"添加课文: {title}")
+            return True
+        return False
+
+    # ==================== 设置项集成增强（新增） ====================
+
+    def register_setting_category(self, category_name, category_info):
+        if not hasattr(self, '_custom_setting_categories'):
+            self._custom_setting_categories = {}
+        self._custom_setting_categories[category_name] = category_info
+        self.logger.info(f"注册设置分类: {category_name}")
+        return True
+
+    def get_setting_categories(self):
+        return getattr(self, '_custom_setting_categories', {})
+
+    def register_setting_item(self, category, item_key, item_info):
+        if not hasattr(self, '_custom_setting_items'):
+            self._custom_setting_items = {}
+        if category not in self._custom_setting_items:
+            self._custom_setting_items[category] = {}
+        self._custom_setting_items[category][item_key] = item_info
+        self.logger.info(f"注册设置项: {category}.{item_key}")
+        return True
+
+    def get_setting_items(self, category=None):
+        items = getattr(self, '_custom_setting_items', {})
+        if category:
+            return items.get(category, {})
+        return items
+
+    def get_app_config(self, section, key, default=None):
+        if hasattr(self.app, 'config_mgr'):
+            return self.app.config_mgr.get(section, key, default)
+        return default
+
+    def set_app_config(self, section, key, value):
+        if hasattr(self.app, 'config_mgr'):
+            self.app.config_mgr.set(section, key, value)
+            self.logger.info(f"设置应用配置: {section}.{key} = {value}")
+            return True
+        return False
+
+    # ==================== 热重载（新增） ====================
+
+    def reload_self(self):
+        plugin_name = self.plugin["meta"]["name"]
+        if self.plugin_mgr:
+            try:
+                self.plugin_mgr.unload_plugin(plugin_name)
+                self.plugin_mgr.load_plugin(plugin_name)
+                self.logger.info(f"插件 {plugin_name} 热重载成功")
+                return True
+            except Exception as e:
+                self.logger.error(f"热重载失败: {str(e)}")
+                return False
+        return False
+
+    def reload_plugin(self, plugin_name):
+        if self.plugin_mgr:
+            try:
+                self.plugin_mgr.unload_plugin(plugin_name)
+                self.plugin_mgr.load_plugin(plugin_name)
+                self.logger.info(f"插件 {plugin_name} 已重载")
+                return True
+            except Exception as e:
+                self.logger.error(f"重载插件 {plugin_name} 失败: {str(e)}")
+                return False
+        return False
+
+    def unload_self(self):
+        plugin_name = self.plugin["meta"]["name"]
+        if self.plugin_mgr:
+            return self.plugin_mgr.unload_plugin(plugin_name)
+        return False
+
+    def load_plugin_by_path(self, file_path):
+        if self.plugin_mgr:
+            return self.plugin_mgr.load_plugin_from_file(file_path)
+        return False, "插件管理器不可用"
+
+    # ==================== 网络和文件API增强（新增） ====================
+
+    def http_get(self, url, headers=None, timeout=10):
+        try:
+            import urllib.request
+            import urllib.error
+            req = urllib.request.Request(url, headers=headers or {})
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                return response.read().decode('utf-8'), response.status, None
+        except Exception as e:
+            return None, None, str(e)
+
+    def http_post(self, url, data=None, headers=None, timeout=10):
+        try:
+            import urllib.request
+            import urllib.parse
+            if data and isinstance(data, dict):
+                data = urllib.parse.urlencode(data).encode('utf-8')
+            req = urllib.request.Request(url, data=data, headers=headers or {})
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                return response.read().decode('utf-8'), response.status, None
+        except Exception as e:
+            return None, None, str(e)
+
+    def http_download(self, url, save_path, timeout=30):
+        try:
+            import urllib.request
+            urllib.request.urlretrieve(url, save_path)
+            return True, None
+        except Exception as e:
+            return False, str(e)
+
+    def read_file(self, file_path, encoding='utf-8'):
+        try:
+            with open(file_path, 'r', encoding=encoding) as f:
+                return f.read(), None
+        except Exception as e:
+            return None, str(e)
+
+    def write_file(self, file_path, content, encoding='utf-8'):
+        try:
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, 'w', encoding=encoding) as f:
+                f.write(content)
+            return True, None
+        except Exception as e:
+            return False, str(e)
+
+    def append_file(self, file_path, content, encoding='utf-8'):
+        try:
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, 'a', encoding=encoding) as f:
+                f.write(content)
+            return True, None
+        except Exception as e:
+            return False, str(e)
+
+    def file_exists(self, file_path):
+        return os.path.exists(file_path)
+
+    def delete_file(self, file_path):
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                return True
+            return False
+        except Exception as e:
+            return False
+
+    def list_directory(self, dir_path):
+        try:
+            return os.listdir(dir_path), None
+        except Exception as e:
+            return None, str(e)
+
+    def create_directory(self, dir_path):
+        try:
+            os.makedirs(dir_path, exist_ok=True)
+            return True
+        except Exception as e:
+            return False
+
+    def get_file_info(self, file_path):
+        try:
+            stat = os.stat(file_path)
+            return {
+                "size": stat.st_size,
+                "created": datetime.fromtimestamp(stat.st_ctime).strftime("%Y-%m-%d %H:%M:%S"),
+                "modified": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                "is_dir": os.path.isdir(file_path),
+                "is_file": os.path.isfile(file_path),
+            }, None
+        except Exception as e:
+            return None, str(e)
+
+    def execute_command(self, command, timeout=30, shell=True):
+        try:
+            import subprocess
+            result = subprocess.run(command, shell=shell, capture_output=True, text=True, timeout=timeout)
+            return {
+                "returncode": result.returncode,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+            }, None
+        except Exception as e:
+            return None, str(e)
+
+    # ==================== 数据库API（新增） ====================
+
+    def init_database(self, db_name="plugin_data"):
+        try:
+            import sqlite3
+            db_path = os.path.join(self.data_dir, f"{db_name}.db")
+            conn = sqlite3.connect(db_path)
+            if not hasattr(self, '_db_connections'):
+                self._db_connections = {}
+            self._db_connections[db_name] = conn
+            self.logger.info(f"数据库初始化: {db_name}")
+            return True, None
+        except Exception as e:
+            return False, str(e)
+
+    def db_execute(self, db_name, sql, params=None):
+        try:
+            if not hasattr(self, '_db_connections') or db_name not in self._db_connections:
+                return None, "数据库未初始化"
+            conn = self._db_connections[db_name]
+            cursor = conn.cursor()
+            cursor.execute(sql, params or ())
+            conn.commit()
+            return cursor.fetchall(), None
+        except Exception as e:
+            return None, str(e)
+
+    def db_query(self, db_name, sql, params=None):
+        return self.db_execute(db_name, sql, params)
+
+    def close_database(self, db_name):
+        try:
+            if hasattr(self, '_db_connections') and db_name in self._db_connections:
+                self._db_connections[db_name].close()
+                del self._db_connections[db_name]
+                return True
+            return False
+        except Exception as e:
+            return False
+
+    # ==================== 调试和性能监控（新增） ====================
+
+    def start_performance_monitor(self):
+        import time
+        self._perf_start_time = time.time()
+        self._perf_counter = 0
+        self.logger.info("性能监控已启动")
+        return True
+
+    def log_performance(self, operation_name):
+        import time
+        if not hasattr(self, '_perf_start_time'):
+            return None
+        elapsed = time.time() - self._perf_start_time
+        self._perf_counter += 1
+        self.logger.info(f"[性能] {operation_name}: {elapsed*1000:.2f}ms (第{self._perf_counter}次)")
+        return elapsed
+
+    def get_memory_usage(self):
+        try:
+            import psutil
+            process = psutil.Process()
+            return process.memory_info().rss / 1024 / 1024
+        except ImportError:
+            try:
+                import resource
+                return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+            except Exception:
+                return None
+
+    def get_cpu_usage(self):
+        try:
+            import psutil
+            return psutil.cpu_percent(interval=0.1)
+        except ImportError:
+            return None
+
+    def set_log_level(self, level):
+        self._log_level = level
+        self.logger.info(f"日志级别设置为: {level}")
+
+    def get_logs(self, lines=100, level=None):
+        all_logs = self.logger.get_logs(lines * 2)
+        if level:
+            all_logs = [l for l in all_logs if f"[{level}]" in l]
+        return all_logs[-lines:]
+
+    def clear_logs(self):
+        try:
+            if os.path.exists(self.logger.log_file):
+                with open(self.logger.log_file, 'w') as f:
+                    f.write("")
+                return True
+        except Exception:
+            pass
+        return False
+
+    # ==================== 资源访问增强（新增） ====================
+
+    def get_main_window(self):
+        return self.app
+
+    def get_central_widget(self):
+        if hasattr(self.app, 'centralWidget'):
+            return self.app.centralWidget()
+        return None
+
+    def get_all_widgets(self):
+        if hasattr(self.app, 'findChildren'):
+            from PyQt5.QtWidgets import QWidget
+            return self.app.findChildren(QWidget)
+        return []
+
+    def get_widget_by_name(self, name):
+        if hasattr(self.app, 'findChild'):
+            from PyQt5.QtWidgets import QWidget
+            return self.app.findChild(QWidget, name)
+        return None
+
+    def get_widgets_by_class(self, class_name):
+        widgets = self.get_all_widgets()
+        return [w for w in widgets if type(w).__name__ == class_name]
+
+    def get_ui_injector(self):
+        try:
+            from plugin_ui_injector import UIInjector
+            return UIInjector(self.app)
+        except Exception as e:
+            self.logger.error(f"获取UI注入器失败: {str(e)}")
+            return None
+
+    def load_resource(self, relative_path):
+        resource_path = os.path.join(self.get_app_dir(), relative_path)
+        if os.path.exists(resource_path):
+            with open(resource_path, 'rb') as f:
+                return f.read()
+        return None
+
+    def save_resource(self, relative_path, data):
+        resource_path = os.path.join(self.data_dir, relative_path)
+        try:
+            os.makedirs(os.path.dirname(resource_path), exist_ok=True)
+            with open(resource_path, 'wb') as f:
+                f.write(data)
+            return True
+        except Exception as e:
+            self.logger.error(f"保存资源失败: {str(e)}")
+            return False
+
+    def get_resource_path(self, relative_path):
+        return os.path.join(self.data_dir, relative_path)
+
+    # ==================== 应用控制（新增） ====================
+
+    def restart_application(self):
+        if hasattr(self.app, '_restart_application'):
+            self.app._restart_application()
+            return True
+        return False
+
+    def quit_application(self):
+        if hasattr(self.app, 'close'):
+            self.app.close()
+            return True
+        return False
+
+    def minimize_application(self):
+        if hasattr(self.app, 'showMinimized'):
+            self.app.showMinimized()
+            return True
+        return False
+
+    def maximize_application(self):
+        if hasattr(self.app, 'showMaximized'):
+            self.app.showMaximized()
+            return True
+        return False
+
+    def set_window_title(self, title):
+        if hasattr(self.app, 'setWindowTitle'):
+            self.app.setWindowTitle(title)
+            return True
+        return False
+
+    def set_window_size(self, width, height):
+        if hasattr(self.app, 'resize'):
+            self.app.resize(width, height)
+            return True
+        return False
+
+    def set_window_on_top(self, on_top=True):
+        if hasattr(self.app, 'setWindowFlags'):
+            from PyQt5.QtCore import Qt
+            flags = self.app.windowFlags()
+            if on_top:
+                flags |= Qt.WindowStaysOnTopHint
+            else:
+                flags &= ~Qt.WindowStaysOnTopHint
+            self.app.setWindowFlags(flags)
+            self.app.show()
+            return True
+        return False
+
+    def show_toast(self, message, duration=2500, color="#0067c0"):
+        try:
+            from PyQt5.QtWidgets import QLabel
+            from PyQt5.QtCore import QTimer, Qt
+            toast = QLabel(message, self.app)
+            toast.setStyleSheet(f"background: {color}; color: white; padding: 12px 24px; border-radius: 8px; font-size: 13px; font-weight: 600;")
+            toast.setAlignment(Qt.AlignCenter)
+            toast.adjustSize()
+            x = (self.app.width() - toast.width()) // 2
+            y = 100
+            toast.move(x, y)
+            toast.show()
+            QTimer.singleShot(duration, toast.close)
+            return True
+        except Exception as e:
+            self.logger.error(f"显示Toast失败: {str(e)}")
+            return False
 
 
 class PluginManager:
@@ -626,6 +1411,19 @@ class PluginManager:
                         plugin["enabled"] = states[plugin_name].get("enabled", True)
                     else:
                         plugin["enabled"] = True
+                    plugin["plugin_dir"] = os.path.join(self.plugins_dir, plugin_name)
+                    plugin["icons_dir"] = os.path.join(plugin["plugin_dir"], "icons")
+                    plugin["resources_dir"] = os.path.join(plugin["plugin_dir"], "resources")
+                    meta = plugin.get("meta", {})
+                    icon_name = meta.get("icon", "")
+                    if icon_name:
+                        icon_path = os.path.join(plugin["icons_dir"], icon_name)
+                        if os.path.exists(icon_path):
+                            plugin["icon_path"] = icon_path
+                        else:
+                            plugin["icon_path"] = None
+                    else:
+                        plugin["icon_path"] = None
                     self.plugins[plugin_name] = plugin
                 else:
                     print(f"插件加载失败 {filename}: {error}")
@@ -712,6 +1510,55 @@ class PluginManager:
             self.contexts[name] = PluginContext(self.plugins[name], app, self)
         return self.contexts[name]
 
+    def _build_plugin_globals(self, context, plugin, app=None):
+        """构建插件执行环境，预注入常用模块"""
+        import datetime as _dt_module
+        from datetime import datetime
+        import os
+        import sys
+        import json
+        import time
+        import random
+        import math
+        import re
+        import collections
+        from pathlib import Path
+        from typing import List, Dict, Optional, Tuple, Any, Callable
+
+        def _plugin_print(*args, **kwargs):
+            message = " ".join(str(a) for a in args)
+            context.logger.info(message)
+
+        exec_globals = {
+            "context": context,
+            "plugin": plugin,
+            "print": _plugin_print,
+            "__name__": f"plugin_{plugin.get('id', 'unknown')}",
+            "datetime": datetime,
+            "datetime_module": _dt_module,
+            "os": os,
+            "sys": sys,
+            "json": json,
+            "time": time,
+            "random": random,
+            "math": math,
+            "re": re,
+            "collections": collections,
+            "Path": Path,
+            "List": List,
+            "Dict": Dict,
+            "Optional": Optional,
+            "Tuple": Tuple,
+            "Any": Any,
+            "Callable": Callable,
+        }
+
+        if app is not None:
+            exec_globals["app"] = app
+            exec_globals["config"] = plugin.get("config", {})
+
+        return exec_globals
+
     def execute_plugin(self, name, app, entry_point="main"):
         plugin = self.get_plugin(name)
         if not plugin:
@@ -723,14 +1570,9 @@ class PluginManager:
             code = plugin.get("code", "")
             if not code.strip():
                 return None, "插件代码为空"
-            exec_globals = {
-                "context": context,
-                "plugin": plugin,
-                "app": app,
-                "config": plugin.get("config", {}),
-                "print": context.log,
-                "__name__": f"plugin_{name}"
-            }
+
+            exec_globals = self._build_plugin_globals(context, plugin, app)
+
             context.logger.info(f"开始执行插件，入口：{entry_point}")
             exec(code, exec_globals)
             if entry_point in exec_globals and callable(exec_globals[entry_point]):
@@ -753,12 +1595,7 @@ class PluginManager:
             return
         try:
             code = plugin.get("code", "")
-            exec_globals = {
-                "context": context,
-                "plugin": plugin,
-                "print": context.log,
-                "__name__": f"plugin_{name}"
-            }
+            exec_globals = self._build_plugin_globals(context, plugin)
             exec(code, exec_globals)
             if method_name in exec_globals and callable(exec_globals[method_name]):
                 context.logger.info(f"调用生命周期方法：{method_name}")
@@ -773,12 +1610,7 @@ class PluginManager:
         context = self.get_context(name, app)
         try:
             code = plugin.get("code", "")
-            exec_globals = {
-                "context": context,
-                "plugin": plugin,
-                "print": context.log,
-                "__name__": f"plugin_{name}"
-            }
+            exec_globals = self._build_plugin_globals(context, plugin, app)
             exec(code, exec_globals)
             if "build_settings_page" in exec_globals and callable(exec_globals["build_settings_page"]):
                 context.logger.info("构建设置页面")
@@ -858,3 +1690,175 @@ def on_uninstall(context):
             version="1.0.0",
             has_settings_page=True
         )
+
+    def load_plugin(self, name):
+        plugin = self.get_plugin(name)
+        if not plugin:
+            return False, "插件不存在"
+        if name in self.contexts:
+            del self.contexts[name]
+        self.plugins[name]["enabled"] = True
+        self._save_plugin_state(name, True)
+        self._call_lifecycle(name, "on_enable")
+        return True, None
+
+    def unload_plugin(self, name):
+        plugin = self.get_plugin(name)
+        if not plugin:
+            return False, "插件不存在"
+        self._call_lifecycle(name, "on_disable")
+        if name in self.contexts:
+            del self.contexts[name]
+        self.plugins[name]["enabled"] = False
+        self._save_plugin_state(name, False)
+        return True, None
+
+    def reload_plugin(self, name):
+        success, error = self.unload_plugin(name)
+        if not success:
+            return False, error
+        success, error = self.load_plugin(name)
+        if not success:
+            return False, error
+        return True, None
+
+    def load_plugin_from_file(self, file_path):
+        if not os.path.exists(file_path):
+            return False, "文件不存在"
+        plugin, error = ArcxParser.parse(file_path)
+        if not plugin:
+            return False, error
+        plugin_name = plugin["meta"]["name"]
+        filename = os.path.basename(file_path)
+        dest_path = os.path.join(self.plugins_dir, filename)
+        import shutil
+        shutil.copy2(file_path, dest_path)
+        plugin["file_path"] = dest_path
+        plugin["filename"] = filename
+        plugin["enabled"] = True
+        self.plugins[plugin_name] = plugin
+        self._save_plugin_state(plugin_name, True)
+        self._call_lifecycle(plugin_name, "on_install")
+        self._call_lifecycle(plugin_name, "on_enable")
+        return True, plugin_name
+
+    def reload_all_plugins(self):
+        results = {}
+        for name in list(self.plugins.keys()):
+            success, error = self.reload_plugin(name)
+            results[name] = {"success": success, "error": error}
+        return results
+
+    def get_loaded_plugins(self):
+        return [name for name, plugin in self.plugins.items() if plugin.get("enabled", True)]
+
+    def get_unloaded_plugins(self):
+        return [name for name, plugin in self.plugins.items() if not plugin.get("enabled", True)]
+
+    def call_plugin_function(self, source_plugin, target_plugin, function_name, *args, **kwargs):
+        target = self.get_plugin(target_plugin)
+        if not target:
+            return None, f"插件 {target_plugin} 不存在"
+        if not target.get("enabled", True):
+            return None, f"插件 {target_plugin} 已禁用"
+        try:
+            context = self.get_context(target_plugin, None)
+            if not context:
+                return None, f"无法获取插件 {target_plugin} 的上下文"
+            code = target.get("code", "")
+            exec_globals = context._get_exec_globals()
+            exec(code, exec_globals)
+            if function_name not in exec_globals:
+                return None, f"插件 {target_plugin} 中没有函数 {function_name}"
+            func = exec_globals[function_name]
+            if not callable(func):
+                return None, f"{function_name} 不是可调用对象"
+            result = func(context, *args, **kwargs)
+            return result, None
+        except Exception as e:
+            return None, str(e)
+
+    def broadcast_to_all_plugins(self, event_name, data=None, exclude=None):
+        count = 0
+        for name, plugin in self.plugins.items():
+            if not plugin.get("enabled", True):
+                continue
+            if exclude and name in exclude:
+                continue
+            try:
+                context = self.get_context(name, None)
+                if context:
+                    context.broadcast_event(event_name, data)
+                    count += 1
+            except Exception:
+                pass
+        return count
+
+    def get_plugin_stats(self):
+        stats = {
+            "total": len(self.plugins),
+            "enabled": len(self.get_loaded_plugins()),
+            "disabled": len(self.get_unloaded_plugins()),
+            "plugins": []
+        }
+        for name, plugin in self.plugins.items():
+            plugin_stat = {
+                "name": name,
+                "version": plugin["meta"].get("version", "0.0.0"),
+                "author": plugin["meta"].get("author", ""),
+                "enabled": plugin.get("enabled", True),
+                "has_settings": plugin["meta"].get("has_settings_page", False),
+                "pages": len(plugin["meta"].get("pages", [])),
+            }
+            context = self.contexts.get(name)
+            if context:
+                plugin_stat["data_dir"] = context.data_dir
+                plugin_stat["libs_count"] = len(context.list_libs())
+            stats["plugins"].append(plugin_stat)
+        return stats
+
+    def get_plugin_logs(self, name, lines=100):
+        context = self.contexts.get(name)
+        if context:
+            return context.logger.get_logs(lines)
+        return []
+
+    def clear_plugin_logs(self, name):
+        context = self.contexts.get(name)
+        if context and os.path.exists(context.logger.log_file):
+            with open(context.logger.log_file, 'w') as f:
+                f.write("")
+            return True
+        return False
+
+    def clear_all_logs(self):
+        count = 0
+        for name in self.plugins:
+            if self.clear_plugin_logs(name):
+                count += 1
+        return count
+
+    def check_plugin_dependencies(self, name):
+        plugin = self.get_plugin(name)
+        if not plugin:
+            return None, "插件不存在"
+        meta = plugin.get("meta", {})
+        dependencies = meta.get("dependencies", [])
+        results = {}
+        for dep in dependencies:
+            dep_plugin = self.get_plugin(dep)
+            results[dep] = {
+                "installed": dep_plugin is not None,
+                "enabled": dep_plugin.get("enabled", False) if dep_plugin else False,
+            }
+        return results, None
+
+    def get_plugin_dependents(self, name):
+        dependents = []
+        for plugin_name, plugin in self.plugins.items():
+            if plugin_name == name:
+                continue
+            dependencies = plugin.get("meta", {}).get("dependencies", [])
+            if name in dependencies:
+                dependents.append(plugin_name)
+        return dependents

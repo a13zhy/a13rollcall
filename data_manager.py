@@ -224,3 +224,97 @@ class DataManager:
     def set_text_progress(self, text_title, index):
         self.config_mgr.set(index, "text_progress", text_title)
         self.config_mgr.save_config()
+    def _get_rounds_file(self):
+        return os.path.join(os.path.dirname(self.config_mgr.get("files", "stats") or "stats.txt"), "rounds_history.json")
+
+    def save_round(self, round_data):
+        import json
+        file_path = self._get_rounds_file()
+        rounds = self._load_rounds()
+        rounds.append(round_data)
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(rounds, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"保存轮次记录失败: {e}")
+
+    def _load_rounds(self):
+        import json
+        file_path = self._get_rounds_file()
+        if not os.path.exists(file_path):
+            return []
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+
+    def get_all_rounds(self):
+        rounds = self._load_rounds()
+        result = []
+        for r in rounds:
+            result.append({
+                "round_id": r.get("round_id", 0),
+                "start_time": r.get("start_time", ""),
+                "end_time": r.get("end_time", ""),
+                "total": r.get("summary", {}).get("total", 0),
+                "mastered": r.get("summary", {}).get("mastered", 0),
+                "familiar": r.get("summary", {}).get("familiar", 0),
+                "unlearned": r.get("summary", {}).get("unlearned", 0),
+            })
+        return result
+
+    def get_round_detail(self, round_id):
+        rounds = self._load_rounds()
+        for r in rounds:
+            if r.get("round_id") == round_id:
+                return r
+        return None
+
+    def delete_round(self, round_id):
+        file_path = self._get_rounds_file()
+        rounds = self._load_rounds()
+        rounds = [r for r in rounds if r.get("round_id") != round_id]
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(rounds, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception:
+            return False
+
+    def get_text_stats(self):
+        rounds = self._load_rounds()
+        text_stats = {}
+        for r in rounds:
+            for rec in r.get("records", []):
+                text = rec.get("text", "未抽取课文")
+                if text not in text_stats:
+                    text_stats[text] = {"total": 0, "mastered": 0, "familiar": 0, "unlearned": 0, "students": []}
+                text_stats[text]["total"] += 1
+                status = rec.get("status", "")
+                if status == "已背过":
+                    text_stats[text]["mastered"] += 1
+                elif status == "未背熟":
+                    text_stats[text]["familiar"] += 1
+                elif status == "未背过":
+                    text_stats[text]["unlearned"] += 1
+                text_stats[text]["students"].append(rec.get("student", ""))
+        return text_stats
+
+    def get_draw_records(self):
+        rounds = self._load_rounds()
+        all_records = []
+        for r in rounds:
+            for rec in r.get("records", []):
+                rec_copy = rec.copy()
+                rec_copy["round_id"] = r.get("round_id", 0)
+                rec_copy["round_start"] = r.get("start_time", "")
+                all_records.append(rec_copy)
+        all_records.sort(key=lambda x: x.get("time", ""), reverse=True)
+        return all_records
+
+    def next_round_id(self):
+        rounds = self._load_rounds()
+        if not rounds:
+            return 1
+        return max(r.get("round_id", 0) for r in rounds) + 1

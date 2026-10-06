@@ -6,7 +6,11 @@ RESTART_REQUIRED_KEYS = [
     "experimental.dpi_optimization",
     "ui.window_opacity",
     "ui.sidebar_width",
-    "experimental.smooth_scroll"
+    "experimental.smooth_scroll",
+    "ui.rounded_window",
+    "ui.window_radius",
+    "ui.window_shadow",
+    "ui.dark_mode",
 ]
 
 DEFAULT_CONFIG = {
@@ -125,6 +129,12 @@ DEFAULT_CONFIG = {
         "window_height": 520,
         "show_count": True,
         "confirm_on_close": True
+    },
+    "tts": {
+        "enabled": False,
+        "rate": 150,
+        "volume": 1.0,
+        "speak_text": True
     },
     "startup": {
         "default_mode": None
