@@ -3,24 +3,40 @@
     "class_name": "A13",
     "app_name": "课堂点名程序",
     "engine_name": "A13",
-    "version": "6.8"
+    "version": "6.8.2"
   },
   "ui": {
     "theme": "light",
+    "skin": "win11_light",
+    "scale": 1.0,
+    "auto_scale": true,
+    "density": "normal",
+    "settings_w": 1180,
+    "settings_h": 780,
+    "rounded_window": true,
+    "window_radius": 12,
+    "window_shadow": true,
+    "window_topmost": false,
+    "mini_on_minimize": false,
+    "mark_toast": true,
+    "echo_enabled": true,
+    "echo_confirm": true,
+    "echo_max": 120,
+    "auto_save_interval": 300,
     "font_family": "微软雅黑",
     "font_size": 12,
     "name_font_size": 50,
     "text_font_size": 14,
     "name_font_weight": "bold",
     "animation_duration": 3.0,
-    "ease_strength": 0.92,
+    "ease_strength": 0.1,
     "animation_curve": "ease_out",
     "button_radius": 10,
     "card_radius": 12,
     "border_width": 1,
     "shadow_enabled": true,
     "sidebar_width": 300,
-    "window_opacity": 1.0,
+    "window_opacity": 0.6,
     "start_animation": true,
     "start_anim_duration": 2500,
     "show_status_bar": true,
@@ -31,16 +47,15 @@
     "particle_enabled": true,
     "particle_count": 30,
     "particle_speed": 2,
-    "scroll_speed": 1.0,
+    "scroll_speed": 0.3,
     "dark_mode": false,
     "status_bar": true,
-    "startup_animation": true,
-    "window_topmost": false
+    "startup_animation": true
   },
   "draw": {
     "mode": "auto",
     "no_repeat": true,
-    "auto_duration": 4.0,
+    "auto_duration": 1.0,
     "dynamic_focus": true,
     "dynamic_weight": true,
     "rate_mastered": 1.0,
@@ -48,7 +63,7 @@
     "rate_unlearned": 3.0,
     "auto_reset_round": true,
     "sound_enabled": false,
-    "anti_cheat": false,
+    "anti_cheat": true,
     "history_limit": 50,
     "weight_multiplier": {
       "已背过": 1,
@@ -60,7 +75,15 @@
     "extract_mode": "段落抽取",
     "paragraph_random": true,
     "show_title": true,
-    "text_align": "left"
+    "text_align": "left",
+    "auto_next": true
+  },
+  "animation": {
+    "draw_enabled": true,
+    "result_enabled": true,
+    "transition_enabled": true,
+    "duration_ms": 300,
+    "easing": "ease_in"
   },
   "files": {
     "students": "students.txt",
@@ -74,14 +97,16 @@
   },
   "shortcut": {
     "enabled": true,
-    "key_draw": "space",
+    "key_draw": "Space",
     "key_mastered": "1",
     "key_familiar": "2",
     "key_unlearned": "3",
-    "key_hide_panel": "Escape",
-    "key_reset_round": "r"
+    "key_hide_panel": "Esc",
+    "key_reset_round": "R"
   },
-  "student_status": {},
+  "student_status": {
+    "小强": "未背熟"
+  },
   "student_weights": {},
   "text_progress": {},
   "experimental": {
@@ -119,10 +144,14 @@
   "tts": {
     "enabled": false,
     "rate": 150,
-    "volume": 1.0,
+    "volume": 0.1,
     "speak_text": true
   },
   "startup": {
-    "default_mode": ""
+    "default_mode": "",
+    "show_quick": true,
+    "remember_choice": true,
+    "countdown_sec": 3,
+    "force_wizard": true
   }
 }

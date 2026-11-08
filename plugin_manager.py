@@ -1427,6 +1427,48 @@ class PluginManager:
                     self.plugins[plugin_name] = plugin
                 else:
                     print(f"插件加载失败 {filename}: {error}")
+        for entry_name in sorted(os.listdir(self.plugins_dir)):
+            folder = os.path.join(self.plugins_dir, entry_name)
+            if not os.path.isdir(folder) or entry_name.startswith("_"):
+                continue
+            manifest_path = os.path.join(folder, "manifest.json")
+            if not os.path.exists(manifest_path):
+                continue
+            try:
+                with open(manifest_path, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+                entry_file = meta.get("entry") or "main.py"
+                entry_path = os.path.join(folder, entry_file)
+                if not os.path.exists(entry_path):
+                    for candidate in ("main.py", "plugin.py", "index.py"):
+                        if os.path.exists(os.path.join(folder, candidate)):
+                            entry_file = candidate
+                            entry_path = os.path.join(folder, candidate)
+                            break
+                if not os.path.exists(entry_path):
+                    print(f"插件目录缺少入口文件 {entry_name}")
+                    continue
+                with open(entry_path, "r", encoding="utf-8") as f:
+                    code = f.read()
+                data = {"meta": meta, "code": code, "config": meta.get("config", {})}
+                plugin = ArcxParser._validate(data)
+                plugin["file_path"] = entry_path
+                plugin["filename"] = entry_name
+                plugin["folder_mode"] = True
+                plugin_name = plugin["meta"]["name"]
+                if plugin_name in states:
+                    plugin["enabled"] = states[plugin_name].get("enabled", True)
+                else:
+                    plugin["enabled"] = True
+                plugin["plugin_dir"] = folder
+                plugin["icons_dir"] = os.path.join(folder, "icons")
+                plugin["resources_dir"] = os.path.join(folder, "resources")
+                icon_name = plugin["meta"].get("icon", "")
+                icon_path = os.path.join(folder, icon_name) if icon_name else ""
+                plugin["icon_path"] = icon_path if icon_path and os.path.exists(icon_path) else None
+                self.plugins[plugin_name] = plugin
+            except Exception as exc:
+                print(f"插件目录加载失败 {entry_name}: {exc}")
 
     def get_plugin(self, name):
         return self.plugins.get(name)

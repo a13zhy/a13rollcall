@@ -18,10 +18,26 @@ DEFAULT_CONFIG = {
         "class_name": "A13",
         "app_name": "课堂点名程序",
         "engine_name": "A13",
-        "version": "6.8"
+        "version": "6.8.2"
     },
     "ui": {
         "theme": "light",
+        "skin": "win11_light",
+        "scale": 1.0,
+        "auto_scale": True,
+        "density": "normal",
+        "settings_w": 1180,
+        "settings_h": 780,
+        "rounded_window": True,
+        "window_radius": 12,
+        "window_shadow": True,
+        "window_topmost": False,
+        "mini_on_minimize": False,
+        "mark_toast": True,
+        "echo_enabled": True,
+        "echo_confirm": True,
+        "echo_max": 120,
+        "auto_save_interval": 300,
         "font_family": "微软雅黑",
         "font_size": 12,
         "name_font_size": 50,
@@ -74,7 +90,15 @@ DEFAULT_CONFIG = {
         "extract_mode": "段落抽取",
         "paragraph_random": True,
         "show_title": True,
-        "text_align": "left"
+        "text_align": "left",
+        "auto_next": True
+    },
+    "animation": {
+        "draw_enabled": True,
+        "result_enabled": True,
+        "transition_enabled": True,
+        "duration_ms": 300,
+        "easing": "ease_out"
     },
     "files": {
         "students": "students.txt",
@@ -137,7 +161,11 @@ DEFAULT_CONFIG = {
         "speak_text": True
     },
     "startup": {
-        "default_mode": None
+        "default_mode": None,
+        "show_quick": True,
+        "remember_choice": True,
+        "countdown_sec": 3,
+        "force_wizard": True
     }
 }
 
