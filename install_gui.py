@@ -8,7 +8,7 @@ from PyQt5.QtGui import QIcon, QFont, QPixmap, QPainter, QLinearGradient, QColor
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 APP_NAME = "A13课堂点名系统"
-VERSION = "V6.8"
+VERSION = "V6.8.2"
 EXE_NAME = "A13课堂点名程序.exe"
 
 

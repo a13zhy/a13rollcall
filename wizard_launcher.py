@@ -6,11 +6,9 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from tkinter.font import Font
 
-APP_EXES = ["A13课堂点名程序.exe", "A13课堂点名系统.exe", "A13Rollcall.exe"]
 WIZARD_INI = "wizard_record.ini"
 STUDENT_FILE = "students.txt"
 TEXT_FILE = "texts.txt"
-MAIN_PY = "main_qt.py"
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
@@ -99,7 +97,7 @@ class WizardApp:
     def _page_welcome(self):
         title = tk.Label(self.content, text="欢迎使用！", font=("微软雅黑", 22, "bold"), fg="#0067c0", bg="#f3f3f3")
         title.pack(pady=(20, 8))
-        subtitle = tk.Label(self.content, text="A13 智能抽取引擎 V6.8", font=("微软雅黑", 12), fg="#666666", bg="#f3f3f3")
+        subtitle = tk.Label(self.content, text="A13 智能抽取引擎 V6.8.2", font=("微软雅黑", 12), fg="#666666", bg="#f3f3f3")
         subtitle.pack(pady=(0, 24))
 
         card = tk.Frame(self.content, bg="white", relief="solid", bd=1)
@@ -243,7 +241,7 @@ class WizardApp:
             ("班级名称", class_name),
             ("学生名单", STUDENT_FILE),
             ("课文库", TEXT_FILE),
-            ("引擎版本", "A13 V6.8"),
+            ("引擎版本", "A13 V6.8.2"),
         ]
         for label, value in summary:
             row = tk.Frame(card_inner, bg="white")
@@ -264,9 +262,10 @@ class WizardApp:
             except Exception:
                 pass
         try:
-            subprocess.Popen(["notepad.exe", filepath])
+            import cross_platform
+            cross_platform.open_with_editor(filepath)
         except Exception as e:
-            messagebox.showerror("错误", f"无法打开记事本：{e}")
+            messagebox.showerror("错误", f"无法打开编辑器：{e}")
 
     def _prev(self):
         if self.current_step > 0:
@@ -313,18 +312,11 @@ class WizardApp:
 
         self.root.destroy()
 
-        exe_path = None
-        for name in APP_EXES:
-            cand = os.path.join(BASE_DIR, name)
-            if os.path.exists(cand):
-                exe_path = cand
-                break
-        py_path = os.path.join(BASE_DIR, MAIN_PY)
         try:
-            if exe_path:
-                subprocess.Popen([exe_path, "--show-tip"], cwd=BASE_DIR)
-            elif os.path.exists(py_path):
-                subprocess.Popen([sys.executable, py_path, "--show-tip"], cwd=BASE_DIR)
+            import cross_platform
+            proc = cross_platform.launch_main(BASE_DIR, ["--show-tip"])
+            if proc is None:
+                print("启动主程序失败: 未找到主程序")
         except Exception as e:
             print(f"启动主程序失败: {e}")
 

@@ -12,7 +12,7 @@ from PyQt5.QtCore import Qt
 # ==================== 应用信息 ====================
 class AppInfo:
     NAME = "A13课堂点名系统"
-    VERSION = "6.8.0"
+    VERSION = "6.8.2"
     BUILD = "20260914"
     AUTHOR = "A13"
     ENGINE_NAME = "A13 Engine"
