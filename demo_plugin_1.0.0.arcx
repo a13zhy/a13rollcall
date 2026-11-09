@@ -1,0 +1,22 @@
+{
+  "meta": {
+    "id": "com.a13.demo",
+    "name": "课堂小工具示例",
+    "version": "1.0.0",
+    "author": "A13",
+    "description": "最简单的可用插件：读学生名单、弹提示、写日志。想看设置页怎么注册，请参考示例插件的 1.2.0。",
+    "type": "general",
+    "api_version": 1,
+    "has_settings_page": false,
+    "permissions": [
+      "ui"
+    ],
+    "min_app_version": "6.8",
+    "max_app_version": "99.0",
+    "repo": "https://github.com/a13zhy/a13rollcall"
+  },
+  "code": "# A13 课堂小工具示例\n# 演示最简单的一件事：读学生名单、弹一个提示、写一条日志\n\ndef main(context):\n    students = context.get_students()\n    context.log('读取到 ' + str(len(students)) + ' 名学生')\n    context.show_message('课堂小工具', '当前班里 ' + str(len(students)) + ' 人')\n",
+  "config": {
+    "enabled": true
+  }
+}
