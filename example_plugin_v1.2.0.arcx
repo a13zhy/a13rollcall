@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "id": "com.a13.sample",
+    "name": "示例插件",
+    "version": "1.2.0",
+    "author": "A13",
+    "description": "插件开发入门模板：读取插件配置、弹出提示、演示 entry 与 manifest 的最小结构。1.2.0 起补了 id 与权限声明，市场里能正确识别已安装与更新。",
+    "type": "general",
+    "api_version": 1,
+    "has_settings_page": true,
+    "settings_page_title": "示例插件",
+    "permissions": [
+      "config",
+      "ui"
+    ],
+    "min_app_version": "6.8",
+    "max_app_version": "99.0",
+    "repo": "https://github.com/a13zhy/a13rollcall"
+  },
+  "code": "IyBBMTMg5o+S5Lu256S65L6L5qih5p2/CiMg5o+S5Lu26ZyA6KaB5a6a5LmJIGmYW4()KSDlh73mlbDvvIzmjqXmlLYgcGx1Z2luX2NvbnRleHQg5Y+C5pWwCgpkZWYgbWFpbihwbHVnaW5fY29udGV4dCk6CiAgICAiIiIKICAgIOaPkuS7tuS4u+WHveaVsAogICAgcGx1Z2luX2NvbnRleHQ6IOaPkuS7tuS4iuS4i+aWh++8jOaPkOS+m+WQhOenjUFQSQogICAgIiIiCiAgICAjIOiOt+WPluaPkuS7tumFjee9rgogICAgY29uZmlnID0gcGx1Z2luX2NvbnRleHQuZ2V0X2NvbmZpZygpCiAgICBlbmnabGVkID0gY29uZmlnLmdldCgiZW5hYmxlZCIsIFRyctWUpCgogICAgaWYgbm90IGVuYWxsZWQ6CiAgICAgICAgcmV0dXJuCgogICAgIyDorrDlvZXml6Xlv5cKICAgIHBsdWdpbl9jb250ZXh0LmxvZ19pbmfuKCLmj5Lku7blt7LlkK/liqgiKQoKICAgICMg5re75Yqg6K6+572u6aG16Z2iCiAgICBwbHVnaW5fY29udGV4dC5hZGRfc2V0dGluZ3NfcGFnZSgKICAgICAgICB0aXRsZT0i56S65L6L5o+S5Lu26K6+572uIiwKICAgICAgICBkZXNjcmlwdGlvbj0i6L+Z5piv5LiA5Liq56S65L6L5o+S5Lu255qE6K6+572u6aG16Z2iIiwKICAgICAgICBpdGVtcz1bCiAgICAgICAgICAgIHsia2V5IjogImVuYWwsZWQyLCAidHlwZSI6ICJzd2l0Y2giLCAibGFiZWwiOiAi5ZCv55So5o+S5Lu2IiwgImRlZmF1bHQiOiBUcnVlfSwKICAgICAgICAgICAgeyJrZXlIjogImRlc3RjcmlwdGlvbiIsICJ0eXBlIjogImlucHV0IiwgImxhYmVsIjogIuaPkOekuua2iOaBryIsICJkZWNiOiAi5L1o5b2TIn0sCiAgICAgICAgXQogICAgKQoKICAgICMg5rOoc5bloizkuovku7bnm5HlkKzCiAgICBkZWYgb25fZHJhd19yZXN1bHQobmFtZSwgdGV4dCk6CiAgICAgICAgcGx1Z2luX2NvbnRleHQubG9nX2luZm8oZiLGhq95Y+W57uT5p6cOiB7bmFtZX0iKQoKICAgIHBsdWdpbl9jb250ZXh0Lm9uKCJkcmhd19yZXN1bHQiLCBvbl9kcmhd19yZXN1bHQpCgogICAgcGx1Z2luX2NvbnRleHQubG9nX2luZm8oIuekuuS+i+aPkuS7tuWKoOi9veWujOaIkCIpCg==",
+  "config": {
+    "enabled": true
+  }
+}
