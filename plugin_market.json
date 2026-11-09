@@ -1,0 +1,35 @@
+{
+  "updated_at": "2026-11-09",
+  "maintainer": "a13zhy",
+  "note": "A13Rollcall 插件市场索引。每个插件是一个目录或 .arcx 包，字段说明见 插件开发完全指南.md。",
+  "plugins": [
+    {
+      "id": "com.a13.sample",
+      "name": "示例插件",
+      "version": "1.0.0",
+      "author": "a13zhy",
+      "description": "插件开发入门模板：读取插件配置、弹出提示、演示 entry 与 manifest 的最小结构。想自己写插件，从这个开始改。",
+      "icon": "",
+      "entry": "main.py",
+      "permissions": [],
+      "tags": ["模板", "入门"],
+      "download_url": "https://raw.githubusercontent.com/a13zhy/a13rollcall/main/example_plugin_v1.0.0.arcx",
+      "size": "1.8 KB",
+      "updated_at": "2026-09-26"
+    },
+    {
+      "id": "com.a13.demo",
+      "name": "课堂小工具示例",
+      "version": "1.0.0",
+      "author": "a13zhy",
+      "description": "带设置页的完整示例：演示插件如何向设置窗口注册自己的页面、如何保存自己的配置项。适合已经跑通模板之后再看。",
+      "icon": "",
+      "entry": "main.py",
+      "permissions": [],
+      "tags": ["示例", "设置页"],
+      "download_url": "https://raw.githubusercontent.com/a13zhy/a13rollcall/main/%E7%A4%BA%E4%BE%8B%E6%8F%92%E4%BB%B6.arcx",
+      "size": "2.7 KB",
+      "updated_at": "2026-09-26"
+    }
+  ]
+}
